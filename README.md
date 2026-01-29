@@ -2,44 +2,86 @@
 
 Action RPG where the player reshapes reality through **Faith**, **Truth**, or **Violence**.
 
-Built with **Godot 4.x** and **GDScript**.
+Built with **Godot 4.3** and **GDScript**.
+
+## Getting Started
+
+1. Open the project in **Godot 4.3+** (Forward Plus renderer)
+2. Hit **Play** — `test_zone.tscn` is the main scene
+3. Walk around, fight enemies, talk to NPCs, channel shrines, encounter gods
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| WASD | Move |
+| Mouse | Camera |
+| Left Click | Melee attack |
+| Right Click | Ranged attack |
+| Space | Jump |
+| Shift | Dodge roll |
+| E | Interact / Advance dialogue |
+| Tab | Quest log |
+| Q | Use item |
+| Esc | Pause menu (forces/factions/gods) |
+
+## The Three Forces
+
+The world reacts to three independent pressure axes (0-100 each):
+
+- **Faith** — Strengthens gods, restores stability, golden atmosphere
+- **Truth** — Erodes gods, clears fog, cold blue atmosphere
+- **Violence** — Destabilizes regions, thickens fog, red atmosphere
+
+These are not morality. They are **world pressure**. Every system reads them.
 
 ## Project Structure
 
 ```
 scenes/
-  player/       - Player character scene
-  enemies/      - Enemy scenes
-  npcs/         - NPC scenes
-  ui/           - HUD and dialogue UI
-  world/        - Zone scenes (test_zone is the entry point)
+  player/         Player character (CharacterBody3D + camera + combat)
+  enemies/        Enemy prefab (state-machine AI)
+  npcs/           NPC prefab (base) + scripted NPCs
+  ui/             HUD, dialogue, death screen, pause menu, quest log, notifications
+  world/          Zones, shrines, god encounters, item pickups
 
 scripts/
-  autoload/     - Global singletons (GameState, WorldManager, DialogueManager)
-  player/       - Player controller and combat
-  enemies/      - Enemy AI
-  npcs/         - NPC interaction logic
-  systems/      - Interactables, zone triggers
-  ui/           - HUD and dialogue UI scripts
+  autoload/       9 global singletons (see IMPLEMENTATION.md)
+  player/         Player controller + projectile
+  enemies/        Enemy AI base class
+  npcs/           NPC base + Ash Walker + Scholar
+  systems/        Interactables, zone triggers, shrines, spawner, environment, god encounters, item pickups
+  ui/             All UI scripts
 ```
 
-## Controls
+## Architecture
 
-- **WASD** — Move
-- **Mouse** — Camera
-- **Left Click** — Melee attack
-- **Right Click** — Ranged attack
-- **Space** — Jump
-- **Shift** — Dodge
-- **E** — Interact / Advance dialogue
-- **Esc** — Toggle mouse capture
+All game state flows through **autoload singletons** (loaded in this order):
 
-## Three Forces
+1. **GameState** — Three Forces, factions, god stability, regions, player stats
+2. **WorldManager** — Zone loading with persistent state
+3. **DialogueManager** — Branching dialogue with force-gated choices
+4. **ForceEffects** — Passive world effects (ticks every 2s)
+5. **FactionManager** — 4 factions with force-aligned reputation
+6. **GodManager** — 3 gods with stability state machines
+7. **WorldEventManager** — Threshold events (holy war, ashfall, etc.)
+8. **QuestManager** — Quest lifecycle with force-reactive rewards
+9. **ItemManager** — Inventory with consumables and quest items
 
-The world reacts to three independent pressure axes:
+Systems communicate via **signals**. No system polls another directly.
 
-- **Faith** — Strengthens miracles, weakens technology
-- **Truth** — Weakens gods, causes reality glitches
-- **Violence** — Destabilizes the world faster
+## Test Zone Contents
 
-Every choice shifts these forces. Every system reads them.
+- **Player** at origin
+- **3 enemies** (violence/faith/truth aligned)
+- **2 quest NPCs** — Ash Walker (faith quest), Shattered Scholar (truth quest)
+- **3 force shrines** — one per force, scattered at edges
+- **2 god encounters** — Verath (SW corner), Kael (SE corner)
+- **3 item pickups** — ash relic, void fragment, health potion
+- **Ruins** — walls and pillars for spatial interest
+- **Enemy spawner** — force-reactive, spawns based on dominant force
+- **Atmosphere system** — sky/fog/light shift in real time with forces
+
+## Current Status
+
+See `IMPLEMENTATION.md` for the full breakdown of every system, file, and feature.
