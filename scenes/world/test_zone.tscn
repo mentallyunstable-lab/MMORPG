@@ -1,10 +1,13 @@
-[gd_scene load_steps=12 format=3 uid="uid://testzone001"]
+[gd_scene load_steps=13 format=3 uid="uid://testzone001"]
 
 [ext_resource type="PackedScene" uid="uid://player001" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://enemy001" path="res://scenes/enemies/enemy_basic.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://npc001" path="res://scenes/npcs/npc_basic.tscn" id="3"]
 [ext_resource type="PackedScene" uid="uid://hud001" path="res://scenes/ui/hud.tscn" id="4"]
 [ext_resource type="PackedScene" uid="uid://dialogueui001" path="res://scenes/ui/dialogue_ui.tscn" id="5"]
+[ext_resource type="PackedScene" uid="uid://shrine001" path="res://scenes/world/force_shrine.tscn" id="6"]
+[ext_resource type="PackedScene" uid="uid://eventnotif001" path="res://scenes/ui/event_notification.tscn" id="7"]
+[ext_resource type="Script" path="res://scripts/systems/force_environment.gd" id="8"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(60, 60)
@@ -88,8 +91,27 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.5, 5)
 npc_name = "Shattered Scholar"
 force_affinity = "truth"
 
+[node name="ForceEnvironment" type="Node3D" parent="."]
+script = ExtResource("8")
+world_env_path = NodePath("../WorldEnvironment")
+sun_light_path = NodePath("../DirectionalLight3D")
+
+[node name="Shrine_Faith" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, 10)
+shrine_force = "faith"
+
+[node name="Shrine_Truth" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -18)
+shrine_force = "truth"
+
+[node name="Shrine_Violence" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, 0)
+shrine_force = "violence"
+
 [node name="UILayer" type="CanvasLayer" parent="."]
 
 [node name="HUD" parent="UILayer" instance=ExtResource("4")]
 
 [node name="DialogueUI" parent="UILayer" instance=ExtResource("5")]
+
+[node name="EventNotification" parent="UILayer" instance=ExtResource("7")]

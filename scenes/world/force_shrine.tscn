@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://shrine001"]
+
+[ext_resource type="Script" path="res://scripts/systems/force_shrine.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(1.0, 1.5, 1.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_shrine"]
+albedo_color = Color(0.3, 0.25, 0.2, 1)
+roughness = 0.7
+emission_enabled = true
+emission = Color(0.5, 0.4, 0.2)
+emission_energy_multiplier = 0.5
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_shrine"]
+size = Vector3(1.0, 1.5, 1.0)
+
+[node name="ForceShrine" type="StaticBody3D" groups=["interactables"]]
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("1")
+
+[node name="ShrineMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+mesh = SubResource("BoxMesh_base")
+surface_material_override/0 = SubResource("StandardMaterial3D_shrine")
+
+[node name="ShrineCollision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("BoxShape3D_shrine")

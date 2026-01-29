@@ -14,6 +14,10 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 GameState="*res://scripts/autoload/game_state.gd"
 WorldManager="*res://scripts/autoload/world_manager.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
+ForceEffects="*res://scripts/autoload/force_effects.gd"
+FactionManager="*res://scripts/autoload/faction_manager.gd"
+GodManager="*res://scripts/autoload/god_manager.gd"
+WorldEventManager="*res://scripts/autoload/world_event_manager.gd"
 
 [display]
 
