@@ -18,6 +18,8 @@ ForceEffects="*res://scripts/autoload/force_effects.gd"
 FactionManager="*res://scripts/autoload/faction_manager.gd"
 GodManager="*res://scripts/autoload/god_manager.gd"
 WorldEventManager="*res://scripts/autoload/world_event_manager.gd"
+QuestManager="*res://scripts/autoload/quest_manager.gd"
+ItemManager="*res://scripts/autoload/item_manager.gd"
 
 [display]
 
@@ -71,6 +73,16 @@ interact={
 dodge={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194325,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+quest_log={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194306,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+use_item={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":81,"key_label":0,"unicode":113,"location":0,"echo":false,"script":null)
 ]
 }
 
