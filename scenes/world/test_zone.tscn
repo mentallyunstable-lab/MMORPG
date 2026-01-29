@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://testzone001"]
+[gd_scene load_steps=14 format=3 uid="uid://testzone001"]
 
 [ext_resource type="PackedScene" uid="uid://player001" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://enemy001" path="res://scenes/enemies/enemy_basic.tscn" id="2"]
@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://shrine001" path="res://scenes/world/force_shrine.tscn" id="6"]
 [ext_resource type="PackedScene" uid="uid://eventnotif001" path="res://scenes/ui/event_notification.tscn" id="7"]
 [ext_resource type="Script" path="res://scripts/systems/force_environment.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/systems/enemy_spawner.gd" id="9"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(60, 60)
@@ -107,6 +108,18 @@ shrine_force = "truth"
 [node name="Shrine_Violence" parent="." instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, 0)
 shrine_force = "violence"
+
+[node name="EnemySpawner" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1, -15)
+script = ExtResource("9")
+spawn_interval = 20.0
+max_enemies = 3
+spawn_radius = 5.0
+spawn_on_ready = false
+enemy_neutral = ExtResource("2")
+enemy_faith = ExtResource("2")
+enemy_truth = ExtResource("2")
+enemy_violence = ExtResource("2")
 
 [node name="UILayer" type="CanvasLayer" parent="."]
 

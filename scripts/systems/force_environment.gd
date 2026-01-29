@@ -52,6 +52,11 @@ func _ready() -> void:
 	_update_environment()
 
 
+func _exit_tree() -> void:
+	if GameState and GameState.force_changed.is_connected(_on_force_changed):
+		GameState.force_changed.disconnect(_on_force_changed)
+
+
 func _on_force_changed(_f: String, _o: float, _n: float) -> void:
 	_update_environment()
 

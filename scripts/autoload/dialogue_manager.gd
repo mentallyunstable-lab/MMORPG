@@ -14,6 +14,9 @@ var current_speaker: String = ""
 # UI node reference — set by DialogueUI when it enters the tree.
 var ui_node: Control = null
 
+# Guard against infinite recursion when skipping gated lines.
+const _MAX_SKIP_DEPTH := 50
+
 
 ## Start a dialogue sequence.
 ## dialogue_data format:
@@ -47,8 +50,13 @@ func start_dialogue(dialogue_data: Array, speaker_name: String = "???") -> void:
 
 
 ## Advance to next line or end dialogue.
-func advance() -> void:
+func advance(_skip_depth: int = 0) -> void:
 	if not is_active:
+		return
+
+	if _skip_depth > _MAX_SKIP_DEPTH:
+		push_warning("DialogueManager: exceeded max skip depth, ending dialogue.")
+		end_dialogue()
 		return
 
 	current_index += 1
@@ -64,8 +72,10 @@ func advance() -> void:
 		current_index += 1
 		entry = current_dialogue[current_index]
 
-	var speaker: String = entry.get("speaker", current_speaker)
-	var text: String = entry.get("text", "")
+	# If we ran out of entries while skipping ID entries
+	if current_index >= current_dialogue.size():
+		end_dialogue()
+		return
 
 	# Check for force-gated lines
 	if entry.has("requires_force"):
@@ -73,22 +83,32 @@ func advance() -> void:
 		var req_min: float = entry.get("requires_min", 0.0)
 		if GameState.get_force(req_force) < req_min:
 			# Skip this line — force requirement not met
-			advance()
+			advance(_skip_depth + 1)
 			return
+
+	var speaker: String = entry.get("speaker", current_speaker)
+	var text: String = entry.get("text", "")
 
 	dialogue_line.emit(speaker, text)
 
 	if entry.has("choices"):
-		var choices: Array = entry["choices"]
-		# Filter choices by force requirements
-		var available: Array = []
-		for choice in choices:
-			if choice.has("requires_force"):
-				if GameState.get_force(choice["requires_force"]) >= choice.get("requires_min", 0.0):
-					available.append(choice)
-			else:
+		_present_filtered_choices(entry["choices"])
+
+
+## Filter and present choices, removing force-gated ones the player can't access.
+func _present_filtered_choices(choices: Array) -> void:
+	var available: Array = []
+	for choice in choices:
+		if choice.has("requires_force"):
+			if GameState.get_force(choice["requires_force"]) >= choice.get("requires_min", 0.0):
 				available.append(choice)
+		else:
+			available.append(choice)
+	if available.size() > 0:
 		dialogue_choices_presented.emit(available)
+	else:
+		# All choices gated — just advance
+		advance()
 
 
 ## Player selected a choice.
@@ -125,7 +145,7 @@ func _jump_to_id(id: String) -> void:
 			var speaker: String = entry.get("speaker", current_speaker)
 			dialogue_line.emit(speaker, entry.get("text", ""))
 			if entry.has("choices"):
-				dialogue_choices_presented.emit(entry["choices"])
+				_present_filtered_choices(entry["choices"])
 			return
 
 	# ID not found — just advance

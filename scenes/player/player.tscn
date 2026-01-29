@@ -33,8 +33,9 @@ mesh = SubResource("CapsuleMesh_player")
 surface_material_override/0 = SubResource("StandardMaterial3D_player")
 
 [node name="MeleeArea" type="Area3D" parent="PlayerMesh"]
-collision_layer = 0
+collision_layer = 2
 collision_mask = 4
+monitorable = false
 
 [node name="MeleeShape" type="CollisionShape3D" parent="PlayerMesh/MeleeArea"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, -1.0)
@@ -43,7 +44,7 @@ shape = SubResource("SphereShape3D_melee")
 [node name="InteractionRay" type="RayCast3D" parent="PlayerMesh"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
 target_position = Vector3(0, 0, -3.5)
-collision_mask = 8
+collision_mask = 8 | 4
 enabled = true
 
 [node name="ProjectileSpawn" type="Marker3D" parent="PlayerMesh"]

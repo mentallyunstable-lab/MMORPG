@@ -16,10 +16,17 @@ extends Node3D
 
 var _timer: float = 0.0
 var _spawned: Array = []
+var _base_max_enemies: int = 0
 
 
 func _ready() -> void:
 	add_to_group("spawners")
+	_base_max_enemies = max_enemies
+
+	if not enemy_neutral and not enemy_faith and not enemy_truth and not enemy_violence:
+		push_warning("EnemySpawner '%s': no enemy scenes assigned." % name)
+		return
+
 	if spawn_on_ready:
 		_spawn_enemy()
 
@@ -84,11 +91,15 @@ func _pick_enemy_scene() -> PackedScene:
 	return null
 
 
+func _exit_tree() -> void:
+	if ForceEffects and ForceEffects.force_tier_changed.is_connected(_on_force_tier_changed):
+		ForceEffects.force_tier_changed.disconnect(_on_force_tier_changed)
+
+
 func _on_force_tier_changed(_force_name: String, tier: String) -> void:
-	# Ramp up spawning at higher tiers
 	match tier:
 		"high":
-			spawn_interval = max(spawn_interval * 0.8, 5.0)
+			spawn_interval = maxf(spawn_interval * 0.8, 5.0)
 		"critical":
-			spawn_interval = max(spawn_interval * 0.6, 3.0)
-			max_enemies += 2
+			spawn_interval = maxf(spawn_interval * 0.6, 3.0)
+			max_enemies = mini(_base_max_enemies + 4, 12)

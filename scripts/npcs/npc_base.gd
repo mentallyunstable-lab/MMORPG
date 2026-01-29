@@ -11,10 +11,20 @@ extends CharacterBody3D
 # Whether this NPC has already been talked to
 var has_spoken: bool = false
 
+# Visual reaction state
+var _mesh_node: MeshInstance3D = null
+var _base_emission_energy: float = 0.3
+
 
 func _ready() -> void:
 	add_to_group("interactables")
 	add_to_group("npcs")
+
+	# Cache mesh for visual reactions
+	_mesh_node = _find_mesh()
+	if _mesh_node and _mesh_node.get_surface_override_material(0):
+		var mat: StandardMaterial3D = _mesh_node.get_surface_override_material(0)
+		_base_emission_energy = mat.emission_energy_multiplier
 
 	# React to force changes
 	GameState.force_changed.connect(_on_force_changed)
@@ -79,10 +89,39 @@ func _default_dialogue() -> Array:
 	]
 
 
-func _on_force_changed(force_name: String, _old_value: float, _new_value: float) -> void:
-	# NPCs with matching affinity could visually react (glow, change stance, etc.)
-	if force_name == force_affinity:
-		pass  # Placeholder for visual reactions
+func _on_force_changed(force_name: String, _old_value: float, new_value: float) -> void:
+	if force_name != force_affinity or force_affinity == "neutral":
+		return
+
+	# Visual reaction: NPC glows brighter when their aligned force is strong
+	if not _mesh_node:
+		return
+
+	var mat: Material = _mesh_node.get_surface_override_material(0)
+	if not mat or not mat is StandardMaterial3D:
+		return
+
+	var std_mat := mat as StandardMaterial3D
+	var intensity := new_value / 100.0
+	std_mat.emission_energy_multiplier = _base_emission_energy + intensity * 1.5
+
+	# Scale pulse at high force
+	if new_value > 70.0:
+		var tween := create_tween()
+		tween.tween_property(self, "scale", Vector3(1.05, 1.1, 1.05), 0.2)
+		tween.tween_property(self, "scale", Vector3.ONE, 0.3)
+
+
+func _find_mesh() -> MeshInstance3D:
+	for child in get_children():
+		if child is MeshInstance3D:
+			return child
+	return null
+
+
+func _exit_tree() -> void:
+	if GameState and GameState.force_changed.is_connected(_on_force_changed):
+		GameState.force_changed.disconnect(_on_force_changed)
 
 
 # --- Persistence ---

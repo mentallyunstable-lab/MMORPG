@@ -23,6 +23,9 @@ extends CharacterBody3D
 @export var ranged_speed: float = 30.0
 @export var attack_cooldown: float = 0.4
 
+# --- Respawn ---
+@export var respawn_delay: float = 2.0
+
 # --- Nodes ---
 @onready var camera_pivot: Node3D = $CameraPivot
 @onready var camera: Camera3D = $CameraPivot/SpringArm3D/Camera3D
@@ -37,15 +40,18 @@ extends CharacterBody3D
 var input_enabled: bool = true
 var is_attacking: bool = false
 var is_dodging: bool = false
+var is_dead: bool = false
 var dodge_timer: float = 0.0
 var dodge_direction: Vector3 = Vector3.ZERO
 var attack_timer: float = 0.0
 var current_interactable: Node = null
+var _spawn_position: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
 	add_to_group("player")
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_spawn_position = global_position
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -54,6 +60,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Camera look
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		if not camera_pivot or not spring_arm:
+			return
 		var motion := event as InputEventMouseMotion
 		camera_pivot.rotate_y(-motion.relative.x * mouse_sensitivity)
 		spring_arm.rotate_x(-motion.relative.y * mouse_sensitivity)
@@ -72,8 +80,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not input_enabled:
-		velocity = Vector3.ZERO
+	if not input_enabled or is_dead:
+		if not is_on_floor():
+			velocity.y -= gravity * delta
+		else:
+			velocity.x = 0
+			velocity.z = 0
 		move_and_slide()
 		return
 
@@ -148,17 +160,20 @@ func _melee_attack() -> void:
 	attack_timer = attack_cooldown
 
 	# Deal damage to all bodies in melee area
+	var hit_count := 0
 	for body in melee_area.get_overlapping_bodies():
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
 			body.take_damage(melee_damage, global_position)
+			hit_count += 1
 
 	# Violence force increase on hit
-	if melee_area.get_overlapping_bodies().size() > 0:
+	if hit_count > 0:
 		GameState.add_force("violence", 0.5)
 
 	# Brief attack state
 	await get_tree().create_timer(0.3).timeout
-	is_attacking = false
+	if is_instance_valid(self):
+		is_attacking = false
 
 
 func _ranged_attack() -> void:
@@ -167,14 +182,16 @@ func _ranged_attack() -> void:
 
 	# Spawn projectile
 	var projectile := _create_projectile()
-	get_tree().root.add_child(projectile)
+	if projectile:
+		get_tree().root.add_child(projectile)
 
 	await get_tree().create_timer(0.2).timeout
-	is_attacking = false
+	if is_instance_valid(self):
+		is_attacking = false
 
 
-func _create_projectile() -> Area3D:
-	var proj := Area3D.new()
+func _create_projectile() -> Projectile:
+	var proj := Projectile.new()
 	proj.name = "Projectile"
 	proj.add_to_group("projectiles")
 
@@ -204,35 +221,9 @@ func _create_projectile() -> Area3D:
 	var forward := -camera_pivot.global_transform.basis.z.normalized()
 	forward.y = -spring_arm.rotation.x  # Account for vertical aim
 
-	# Attach script via inline approach
-	var script := GDScript.new()
-	script.source_code = """extends Area3D
-var direction := Vector3.ZERO
-var speed := 30.0
-var damage := 15.0
-var lifetime := 3.0
-
-func _ready() -> void:
-	body_entered.connect(_on_body_entered)
-
-func _physics_process(delta: float) -> void:
-	position += direction * speed * delta
-	lifetime -= delta
-	if lifetime <= 0:
-		queue_free()
-
-func _on_body_entered(body: Node3D) -> void:
-	if body.is_in_group(\"enemies\") and body.has_method(\"take_damage\"):
-		body.take_damage(damage, global_position)
-		GameState.add_force(\"violence\", 0.3)
-	if not body.is_in_group(\"player\"):
-		queue_free()
-"""
-	script.reload()
-	proj.set_script(script)
-	proj.set("direction", forward)
-	proj.set("speed", ranged_speed)
-	proj.set("damage", ranged_damage)
+	proj.direction = forward
+	proj.speed = ranged_speed
+	proj.damage = ranged_damage
 
 	# Collision setup
 	proj.collision_layer = 16  # Layer 5: Projectiles
@@ -261,12 +252,13 @@ func _start_dodge() -> void:
 # --- Interaction ---
 
 func _check_interactables() -> void:
+	if not interaction_ray:
+		return
+
 	if interaction_ray.is_colliding():
 		var collider := interaction_ray.get_collider()
 		if collider and collider.is_in_group("interactables"):
-			if current_interactable != collider:
-				current_interactable = collider
-				# Could show "Press E" prompt here
+			current_interactable = collider
 		else:
 			current_interactable = null
 	else:
@@ -278,13 +270,16 @@ func _try_interact() -> void:
 		DialogueManager.advance()
 		return
 
-	if current_interactable and current_interactable.has_method("interact"):
+	if current_interactable and is_instance_valid(current_interactable) and current_interactable.has_method("interact"):
 		current_interactable.interact(self)
 
 
 # --- Damage ---
 
 func take_damage(amount: float, _source_position: Vector3 = Vector3.ZERO) -> void:
+	if is_dead:
+		return
+
 	GameState.player_health -= amount
 	if GameState.player_health <= 0:
 		GameState.player_health = 0
@@ -293,8 +288,34 @@ func take_damage(amount: float, _source_position: Vector3 = Vector3.ZERO) -> voi
 
 
 func _die() -> void:
+	is_dead = true
 	input_enabled = false
-	# Placeholder — trigger death screen, respawn, etc.
+	velocity = Vector3.ZERO
+
+	# Visual death feedback — fade mesh
+	if mesh:
+		var tween := create_tween()
+		tween.tween_property(mesh, "modulate" if mesh is CanvasItem else "scale", Vector3(0.8, 0.2, 0.8), 0.5)
+
+	# Respawn after delay
+	await get_tree().create_timer(respawn_delay).timeout
+	if is_instance_valid(self):
+		_respawn()
+
+
+func _respawn() -> void:
+	is_dead = false
+	input_enabled = true
+	GameState.player_health = GameState.player_max_health
+	GameState.player_alive = true
+	global_position = _spawn_position
+
+	# Restore scale
+	if mesh:
+		mesh.scale = Vector3.ONE
+
+	# Add violence from dying
+	GameState.add_force("violence", 1.0)
 
 
 func heal(amount: float) -> void:

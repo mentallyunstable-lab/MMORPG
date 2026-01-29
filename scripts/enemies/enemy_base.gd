@@ -161,14 +161,18 @@ func _state_attack(delta: float) -> void:
 
 
 func _perform_attack() -> void:
-	if player_ref and player_ref.has_method("take_damage"):
-		var dmg := attack_damage
+	if not player_ref or not is_instance_valid(player_ref):
+		return
+	if not player_ref.has_method("take_damage"):
+		return
 
-		# Faith-aligned enemies deal more when faith is low
-		if force_affinity == "faith" and GameState.faith < 20.0:
-			dmg *= 1.5
+	var dmg := attack_damage
 
-		player_ref.take_damage(dmg, global_position)
+	# Faith-aligned enemies deal more when faith is low
+	if force_affinity == "faith" and GameState.faith < 20.0:
+		dmg *= 1.5
+
+	player_ref.take_damage(dmg, global_position)
 
 
 # --- Detection ---
@@ -244,12 +248,23 @@ func _pick_patrol_target() -> void:
 	patrol_target = home_position + offset
 
 
+# --- Lifecycle ---
+
+func _exit_tree() -> void:
+	if GameState and GameState.force_changed.is_connected(_on_force_changed):
+		GameState.force_changed.disconnect(_on_force_changed)
+
+
 # --- World Pressure Reaction ---
 
+var _force_buff_applied: bool = false
+
 func _on_force_changed(force_name: String, _old_value: float, new_value: float) -> void:
-	# Enemies with matching affinity react to their force changing
-	if force_name == force_affinity and new_value > 70.0:
-		# High pressure — become more aggressive
+	if is_dead:
+		return
+	# Apply once when matching force exceeds threshold
+	if force_name == force_affinity and new_value > 70.0 and not _force_buff_applied:
+		_force_buff_applied = true
 		detection_range *= 1.2
 		attack_damage *= 1.1
 

@@ -22,7 +22,7 @@ func _process(_delta: float) -> void:
 
 	# Show interact prompt when player has a target
 	var player := get_tree().get_first_node_in_group("player")
-	if player and "current_interactable" in player:
+	if player and player is PlayerController:
 		interact_prompt.visible = player.current_interactable != null
 	else:
 		interact_prompt.visible = false
