@@ -1,0 +1,130 @@
+[gd_scene load_steps=14 format=3 uid="uid://testzone001"]
+
+[ext_resource type="PackedScene" uid="uid://player001" path="res://scenes/player/player.tscn" id="1"]
+[ext_resource type="PackedScene" uid="uid://enemy001" path="res://scenes/enemies/enemy_basic.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://npc001" path="res://scenes/npcs/npc_basic.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://hud001" path="res://scenes/ui/hud.tscn" id="4"]
+[ext_resource type="PackedScene" uid="uid://dialogueui001" path="res://scenes/ui/dialogue_ui.tscn" id="5"]
+[ext_resource type="PackedScene" uid="uid://shrine001" path="res://scenes/world/force_shrine.tscn" id="6"]
+[ext_resource type="PackedScene" uid="uid://eventnotif001" path="res://scenes/ui/event_notification.tscn" id="7"]
+[ext_resource type="Script" path="res://scripts/systems/force_environment.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/systems/enemy_spawner.gd" id="9"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(60, 60)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.15, 0.14, 0.13, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(60, 0.1, 60)
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.05, 0.05, 0.1, 1)
+sky_horizon_color = Color(0.2, 0.1, 0.08, 1)
+ground_bottom_color = Color(0.05, 0.04, 0.03, 1)
+ground_horizon_color = Color(0.2, 0.1, 0.08, 1)
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 2
+ambient_light_color = Color(0.15, 0.1, 0.08, 1)
+ambient_light_energy = 0.4
+fog_enabled = true
+fog_light_color = Color(0.15, 0.1, 0.08, 1)
+fog_density = 0.01
+volumetric_fog_enabled = false
+
+[node name="TestZone" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.433, 0.25, 0, 0.5, 0.866, -0.5, -0.75, 0.433, 0, 20, 0)
+light_color = Color(0.9, 0.7, 0.5, 1)
+light_energy = 0.6
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="." groups=["world"]]
+collision_layer = 1
+
+[node name="GroundMesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("PlaneMesh_ground")
+surface_material_override/0 = SubResource("StandardMaterial3D_ground")
+
+[node name="GroundCollision" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+shape = SubResource("BoxShape3D_ground")
+
+[node name="SpawnPoint_default" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Player" parent="." instance=ExtResource("1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Enemy_Patrol1" parent="." instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, -8)
+force_affinity = "violence"
+
+[node name="Enemy_Patrol2" parent="." instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1, -12)
+force_affinity = "faith"
+
+[node name="Enemy_Guard" parent="." instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, 5)
+force_affinity = "truth"
+max_health = 80.0
+detection_range = 15.0
+
+[node name="NPC_AshWalker" parent="." instance=ExtResource("3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.5, -3)
+npc_name = "Ash Walker"
+force_affinity = "faith"
+
+[node name="NPC_Scholar" parent="." instance=ExtResource("3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.5, 5)
+npc_name = "Shattered Scholar"
+force_affinity = "truth"
+
+[node name="ForceEnvironment" type="Node3D" parent="."]
+script = ExtResource("8")
+world_env_path = NodePath("../WorldEnvironment")
+sun_light_path = NodePath("../DirectionalLight3D")
+
+[node name="Shrine_Faith" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, 10)
+shrine_force = "faith"
+
+[node name="Shrine_Truth" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -18)
+shrine_force = "truth"
+
+[node name="Shrine_Violence" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, 0)
+shrine_force = "violence"
+
+[node name="EnemySpawner" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1, -15)
+script = ExtResource("9")
+spawn_interval = 20.0
+max_enemies = 3
+spawn_radius = 5.0
+spawn_on_ready = false
+enemy_neutral = ExtResource("2")
+enemy_faith = ExtResource("2")
+enemy_truth = ExtResource("2")
+enemy_violence = ExtResource("2")
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="HUD" parent="UILayer" instance=ExtResource("4")]
+
+[node name="DialogueUI" parent="UILayer" instance=ExtResource("5")]
+
+[node name="EventNotification" parent="UILayer" instance=ExtResource("7")]
