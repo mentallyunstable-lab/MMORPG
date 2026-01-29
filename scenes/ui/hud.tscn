@@ -1,0 +1,107 @@
+[gd_scene load_steps=2 format=3 uid="uid://hud001"]
+
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1"]
+
+[node name="HUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 320.0
+offset_bottom = 180.0
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="HealthLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "HEALTH"
+theme_override_font_sizes/font_size = 12
+
+[node name="HealthBar" type="ProgressBar" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(250, 20)
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 10)
+
+[node name="ForcesLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "WORLD FORCES"
+theme_override_font_sizes/font_size = 12
+
+[node name="ForceBars" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="FaithLabel" type="Label" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+text = "Faith"
+theme_override_colors/font_color = Color(0.6, 0.7, 1.0, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="FaithBar" type="ProgressBar" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+custom_minimum_size = Vector2(200, 12)
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="TruthLabel" type="Label" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+text = "Truth"
+theme_override_colors/font_color = Color(1.0, 1.0, 0.6, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="TruthBar" type="ProgressBar" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+custom_minimum_size = Vector2(200, 12)
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="ViolenceLabel" type="Label" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+text = "Violence"
+theme_override_colors/font_color = Color(1.0, 0.4, 0.3, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="ViolenceBar" type="ProgressBar" parent="MarginContainer/VBoxContainer/ForceBars"]
+layout_mode = 2
+custom_minimum_size = Vector2(200, 12)
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="InteractPrompt" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = 50.0
+offset_right = 100.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[E] Interact"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 0.8)
+theme_override_font_sizes/font_size = 16

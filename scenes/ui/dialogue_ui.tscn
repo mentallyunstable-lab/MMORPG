@@ -1,0 +1,59 @@
+[gd_scene load_steps=2 format=3 uid="uid://dialogueui001"]
+
+[ext_resource type="Script" path="res://scripts/ui/dialogue_ui.gd" id="1"]
+
+[node name="DialogueUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="DialoguePanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 100.0
+offset_top = -220.0
+offset_right = -100.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="DialoguePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="DialoguePanel/MarginContainer"]
+layout_mode = 2
+
+[node name="SpeakerLabel" type="Label" parent="DialoguePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.8, 0.5, 1)
+theme_override_font_sizes/font_size = 20
+text = "Speaker"
+
+[node name="TextLabel" type="RichTextLabel" parent="DialoguePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 60)
+text = "Dialogue text goes here."
+fit_content = true
+
+[node name="ChoicesContainer" type="VBoxContainer" parent="DialoguePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+visible = false
+
+[node name="ContinueLabel" type="Label" parent="DialoguePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "[E] Continue"
+horizontal_alignment = 2
