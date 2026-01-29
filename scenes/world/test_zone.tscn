@@ -1,24 +1,30 @@
-[gd_scene load_steps=14 format=3 uid="uid://testzone001"]
+[gd_scene load_steps=26 format=3 uid="uid://testzone001"]
 
 [ext_resource type="PackedScene" uid="uid://player001" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://enemy001" path="res://scenes/enemies/enemy_basic.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://npc001" path="res://scenes/npcs/npc_basic.tscn" id="3"]
 [ext_resource type="PackedScene" uid="uid://hud001" path="res://scenes/ui/hud.tscn" id="4"]
 [ext_resource type="PackedScene" uid="uid://dialogueui001" path="res://scenes/ui/dialogue_ui.tscn" id="5"]
 [ext_resource type="PackedScene" uid="uid://shrine001" path="res://scenes/world/force_shrine.tscn" id="6"]
 [ext_resource type="PackedScene" uid="uid://eventnotif001" path="res://scenes/ui/event_notification.tscn" id="7"]
 [ext_resource type="Script" path="res://scripts/systems/force_environment.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/systems/enemy_spawner.gd" id="9"]
+[ext_resource type="PackedScene" uid="uid://itempickup001" path="res://scenes/world/item_pickup.tscn" id="10"]
+[ext_resource type="PackedScene" uid="uid://godencounter001" path="res://scenes/world/god_encounter.tscn" id="11"]
+[ext_resource type="Script" path="res://scripts/npcs/npc_ashwalker.gd" id="12"]
+[ext_resource type="Script" path="res://scripts/npcs/npc_scholar.gd" id="13"]
+[ext_resource type="PackedScene" uid="uid://deathscreen001" path="res://scenes/ui/death_screen.tscn" id="14"]
+[ext_resource type="PackedScene" uid="uid://pausemenu001" path="res://scenes/ui/pause_menu.tscn" id="15"]
+[ext_resource type="PackedScene" uid="uid://questlog001" path="res://scenes/ui/quest_log_ui.tscn" id="16"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-size = Vector2(60, 60)
+size = Vector2(80, 80)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
 albedo_color = Color(0.15, 0.14, 0.13, 1)
 roughness = 0.9
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
-size = Vector3(60, 0.1, 60)
+size = Vector3(80, 0.1, 80)
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.05, 0.05, 0.1, 1)
@@ -39,6 +45,20 @@ fog_enabled = true
 fog_light_color = Color(0.15, 0.1, 0.08, 1)
 fog_density = 0.01
 volumetric_fog_enabled = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_ruin_wall"]
+size = Vector3(4.0, 3.0, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ruin"]
+albedo_color = Color(0.2, 0.18, 0.15, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_ruin_pillar"]
+size = Vector3(0.6, 4.0, 0.6)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_npc"]
+radius = 0.3
+height = 1.0
 
 [node name="TestZone" type="Node3D"]
 
@@ -82,15 +102,25 @@ force_affinity = "truth"
 max_health = 80.0
 detection_range = 15.0
 
-[node name="NPC_AshWalker" parent="." instance=ExtResource("3")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.5, -3)
-npc_name = "Ash Walker"
-force_affinity = "faith"
+[node name="NPC_AshWalker" type="CharacterBody3D" parent="." groups=["interactables", "npcs"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, -3)
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("12")
 
-[node name="NPC_Scholar" parent="." instance=ExtResource("3")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.5, 5)
-npc_name = "Shattered Scholar"
-force_affinity = "truth"
+[node name="AshWalkerMesh" type="MeshInstance3D" parent="NPC_AshWalker"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("CapsuleMesh_npc")
+
+[node name="NPC_Scholar" type="CharacterBody3D" parent="." groups=["interactables", "npcs"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("13")
+
+[node name="ScholarMesh" type="MeshInstance3D" parent="NPC_Scholar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("CapsuleMesh_npc")
 
 [node name="ForceEnvironment" type="Node3D" parent="."]
 script = ExtResource("8")
@@ -98,16 +128,38 @@ world_env_path = NodePath("../WorldEnvironment")
 sun_light_path = NodePath("../DirectionalLight3D")
 
 [node name="Shrine_Faith" parent="." instance=ExtResource("6")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, 10)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 15)
 shrine_force = "faith"
 
 [node name="Shrine_Truth" parent="." instance=ExtResource("6")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -22)
 shrine_force = "truth"
 
 [node name="Shrine_Violence" parent="." instance=ExtResource("6")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0, 0)
 shrine_force = "violence"
+
+[node name="GodEncounter_Verath" parent="." instance=ExtResource("11")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -20)
+god_id = "verath"
+
+[node name="GodEncounter_Kael" parent="." instance=ExtResource("11")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -20)
+god_id = "kael"
+
+[node name="Pickup_AshRelic" parent="." instance=ExtResource("10")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, -18)
+item_id = "ash_relic"
+quest_target_id = "ash_relic"
+
+[node name="Pickup_VoidFragment" parent="." instance=ExtResource("10")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0, 8)
+item_id = "void_fragment"
+quest_target_id = "void_fragment"
+
+[node name="Pickup_HealthPotion" parent="." instance=ExtResource("10")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 10)
+item_id = "health_potion"
 
 [node name="EnemySpawner" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1, -15)
@@ -121,6 +173,48 @@ enemy_faith = ExtResource("2")
 enemy_truth = ExtResource("2")
 enemy_violence = ExtResource("2")
 
+[node name="Ruins" type="Node3D" parent="."]
+
+[node name="Wall_North1" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, -16)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Wall_North2" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(0.707, 0, -0.707, 0, 1, 0, 0.707, 0, 0.707, 16, 1.5, -14)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Wall_East" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 24, 1.5, 5)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Pillar1" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 2, -8)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Pillar2" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 2, -10)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Pillar3" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 8, 2, 12)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Pillar4" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 2, 18)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="Wall_South" type="MeshInstance3D" parent="Ruins"]
+transform = Transform3D(0.866, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866, -6, 1.0, 22)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
 [node name="UILayer" type="CanvasLayer" parent="."]
 
 [node name="HUD" parent="UILayer" instance=ExtResource("4")]
@@ -128,3 +222,9 @@ enemy_violence = ExtResource("2")
 [node name="DialogueUI" parent="UILayer" instance=ExtResource("5")]
 
 [node name="EventNotification" parent="UILayer" instance=ExtResource("7")]
+
+[node name="DeathScreen" parent="UILayer" instance=ExtResource("14")]
+
+[node name="QuestLogUI" parent="UILayer" instance=ExtResource("16")]
+
+[node name="PauseMenu" parent="UILayer" instance=ExtResource("15")]

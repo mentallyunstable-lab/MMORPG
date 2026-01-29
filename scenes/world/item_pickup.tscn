@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://itempickup001"]
+
+[ext_resource type="Script" path="res://scripts/systems/item_pickup.gd" id="1"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_pickup"]
+radius = 0.25
+height = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pickup"]
+albedo_color = Color(0.8, 0.6, 0.2, 1)
+emission_enabled = true
+emission = Color(0.9, 0.7, 0.3)
+emission_energy_multiplier = 1.0
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_pickup"]
+radius = 0.4
+
+[node name="ItemPickup" type="StaticBody3D" groups=["interactables"]]
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("1")
+
+[node name="PickupMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+mesh = SubResource("SphereMesh_pickup")
+surface_material_override/0 = SubResource("StandardMaterial3D_pickup")
+
+[node name="PickupCollision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("SphereShape3D_pickup")
