@@ -49,7 +49,8 @@ Complete breakdown of every system, script, and scene in the project.
 - Groups: `interactables`, `npcs`
 - Dynamic dialogue based on dominant force and NPC's force_affinity
 - Default dialogue offers three-force choice (Faith/Truth/Violence, +2.0 each)
-- **Visual reactions:** Emission glow scales with aligned force (0-100 mapped to 0-1.5 energy). Scale pulse tween at force > 70
+- **Visual reactions:** Emission glow scales with aligned force (0-100 mapped to 0-1.5 energy). Scale pulse tween at force > 70. Requires `StandardMaterial3D` with emission on the NPC mesh.
+- **Collision:** CapsuleShape3D on layer 4 (Interactables) — required for interaction ray detection
 - Signal cleanup in `_exit_tree()`
 - Persistence: `has_spoken` flag
 
@@ -181,7 +182,8 @@ One-time threshold events:
 - Events queued and processed sequentially with 0.5s gaps
 - Each event has a notification (title + description) and mechanical effects
 - Listens to ForceEffects, GodManager, FactionManager for cascade events
-- Persistence: `triggered_events` dictionary
+- **Ending conditions:** Three endings fire once — god_death (any god dies), god_ascension (any god ascends), ashfall (world pressure >= 85). Emits `ending_reached` signal and "THE END" notification.
+- Persistence: `triggered_events` dictionary, `ending_triggered` flag
 
 ### Force Shrine (`scripts/systems/force_shrine.gd`)
 **Class:** `ForceShrine` extends `Interactable`
@@ -278,6 +280,7 @@ Interactive altar where the player talks to a god's presence. Dialogue changes e
 - **Ascended:** "I HAVE TRANSCENDED." Extreme force costs (+8 each)
 
 Each choice shifts the corresponding force. Violence options are always available.
+30s cooldown between encounters to prevent repeat abuse.
 
 ### Item Pickup (`scripts/systems/item_pickup.gd`)
 **Class:** `ItemPickup` extends `Interactable`

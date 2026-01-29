@@ -6,8 +6,10 @@ extends Interactable
 @export var god_id: String = "verath"
 @export var faith_cost: float = 5.0
 @export var truth_cost: float = 5.0
+@export var encounter_cooldown: float = 30.0
 
 var _encounter_triggered: bool = false
+var _cooldown_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -16,9 +18,19 @@ func _ready() -> void:
 	interaction_text = "Approach the presence"
 
 
+func _process(delta: float) -> void:
+	if _cooldown_timer > 0:
+		_cooldown_timer -= delta
+
+
 func _on_interact(player: Node) -> void:
 	if DialogueManager.is_active:
 		return
+
+	if _cooldown_timer > 0:
+		return
+
+	_cooldown_timer = encounter_cooldown
 
 	var god_name := GodManager.get_god_name(god_id)
 	var state := GodManager.get_god_state(god_id)

@@ -5,9 +5,11 @@ extends Node
 
 signal event_triggered(event_id: String, data: Dictionary)
 signal event_notification(title: String, description: String)
+signal ending_reached(ending_type: String, description: String)
 
 # Track which one-time events have fired
 var triggered_events: Dictionary = {}
+var _ending_triggered: bool = false
 
 # Pending event queue (for sequencing)
 var _event_queue: Array = []
@@ -93,6 +95,7 @@ func _check_threshold_events() -> void:
 			"description": "The world pressure exceeds what reality can contain. Ash falls from a sky that shouldn't exist.",
 			"effect": "world_transformation",
 		})
+		_check_ending("ashfall", "The ash falls. Reality buckles under the weight of all three forces.")
 
 	# --- Region corruption ---
 	for zone_id in GameState.region_state:
@@ -188,16 +191,27 @@ func _apply_event_effects(event_id: String, data: Dictionary) -> void:
 				GameState.set_region_value(zone_id, "fully_corrupted", true)
 
 
+## Check if an ending condition has been reached. Fires once.
+func _check_ending(ending_type: String, description: String) -> void:
+	if _ending_triggered:
+		return
+	_ending_triggered = true
+	ending_reached.emit(ending_type, description)
+	event_notification.emit("THE END", description)
+
+
 # --- Persistence ---
 
 func save_state() -> Dictionary:
 	return {
 		"triggered_events": triggered_events.duplicate(),
+		"ending_triggered": _ending_triggered,
 	}
 
 
 func load_state(save_data: Dictionary) -> void:
 	triggered_events = save_data.get("triggered_events", {})
+	_ending_triggered = save_data.get("ending_triggered", false)
 
 
 # --- Listener callbacks ---
@@ -220,8 +234,10 @@ func _on_god_state_changed(god_id: String, _old_state: String, new_state: String
 	match new_state:
 		"dead":
 			event_notification.emit("God Slain", "%s has fallen." % god_name)
+			_check_ending("god_death", "A god has died. The world will never be the same.")
 		"ascended":
 			event_notification.emit("God Ascended", "%s transcends." % god_name)
+			_check_ending("god_ascension", "A god has transcended. Faith remade the world.")
 		"fading":
 			event_notification.emit("God Fading", "%s grows dim..." % god_name)
 

@@ -4,6 +4,10 @@ Action RPG where the player reshapes reality through **Faith**, **Truth**, or **
 
 Built with **Godot 4.3** and **GDScript**.
 
+> Multiplayer is out of scope until core loop is finished.
+
+Single-player only. No new systems beyond what is documented in `IMPLEMENTATION.md`.
+
 ## Getting Started
 
 1. Open the project in **Godot 4.3+** (Forward Plus renderer)
@@ -59,14 +63,14 @@ scripts/
 All game state flows through **autoload singletons** (loaded in this order):
 
 1. **GameState** — Three Forces, factions, god stability, regions, player stats
-2. **WorldManager** — Zone loading with persistent state
-3. **DialogueManager** — Branching dialogue with force-gated choices
-4. **ForceEffects** — Passive world effects (ticks every 2s)
-5. **FactionManager** — 4 factions with force-aligned reputation
-6. **GodManager** — 3 gods with stability state machines
-7. **WorldEventManager** — Threshold events (holy war, ashfall, etc.)
-8. **QuestManager** — Quest lifecycle with force-reactive rewards
-9. **ItemManager** — Inventory with consumables and quest items
+2. **ForceEffects** — Passive world effects (ticks every 2s)
+3. **FactionManager** — 4 factions with force-aligned reputation
+4. **GodManager** — 3 gods with stability state machines
+5. **WorldEventManager** — Threshold events (holy war, ashfall, etc.)
+6. **QuestManager** — Quest lifecycle with force-reactive rewards
+7. **ItemManager** — Inventory with consumables and quest items
+8. **WorldManager** — Zone loading with persistent state
+9. **DialogueManager** — Branching dialogue with force-gated choices
 
 Systems communicate via **signals**. No system polls another directly.
 
