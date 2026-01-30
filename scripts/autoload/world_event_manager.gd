@@ -140,7 +140,7 @@ func _process_next_event() -> void:
 
 
 ## Apply mechanical effects of an event.
-func _apply_event_effects(event_id: String, data: Dictionary) -> void:
+func _apply_event_effects(_event_id: String, data: Dictionary) -> void:
 	var effect: String = data.get("effect", "")
 
 	match effect:
@@ -199,6 +199,9 @@ func _check_ending(ending_type: String, description: String) -> void:
 	_ending_triggered = true
 	ending_reached.emit(ending_type, description)
 	event_notification.emit("THE END", description)
+
+	# Lock the save permanently — no rewind, no retry
+	GameState.lock_ending(ending_type, description)
 
 
 # --- Persistence ---

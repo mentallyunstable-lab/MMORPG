@@ -61,6 +61,11 @@ func _on_force_changed(_f: String, _o: float, _n: float) -> void:
 	_update_environment()
 
 
+func _process(_delta: float) -> void:
+	# Apply visual decay every frame (driven by ForceEffects.decay_level)
+	_apply_decay()
+
+
 func _update_environment() -> void:
 	if not _env:
 		return
@@ -124,3 +129,36 @@ func _update_environment() -> void:
 		energy += faith_t * 0.3
 		energy -= violence_t * 0.2
 		sun_light.light_energy = maxf(energy, 0.15)
+
+
+## Apply visual decay on top of force-based environment — fog thickens,
+## color drains, light dims. The world rots in real time.
+func _apply_decay() -> void:
+	if not _env:
+		return
+
+	var decay := ForceEffects.decay_level  # 0-1
+	if decay < 0.01:
+		return
+
+	# Fog thickens with decay
+	_env.fog_density = _env.fog_density + decay * 0.04
+
+	# Color desaturation — lerp fog and ambient toward gray
+	var gray := Color(0.15, 0.13, 0.12)
+	_env.fog_light_color = _env.fog_light_color.lerp(gray, decay * 0.5)
+	_env.ambient_light_color = _env.ambient_light_color.lerp(gray, decay * 0.4)
+
+	# Dim ambient light
+	_env.ambient_light_energy = maxf(_env.ambient_light_energy - decay * 0.3, 0.05)
+
+	# Sky desaturation
+	if _sky_mat:
+		var ash_sky := Color(0.08, 0.07, 0.06)
+		_sky_mat.sky_top_color = _sky_mat.sky_top_color.lerp(ash_sky, decay * 0.4)
+		_sky_mat.sky_horizon_color = _sky_mat.sky_horizon_color.lerp(ash_sky, decay * 0.3)
+
+	# Sun dims
+	if sun_light:
+		sun_light.light_energy = maxf(sun_light.light_energy - decay * 0.4, 0.05)
+		sun_light.light_color = sun_light.light_color.lerp(Color(0.5, 0.3, 0.2), decay * 0.3)

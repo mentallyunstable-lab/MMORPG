@@ -25,6 +25,43 @@ func _ready() -> void:
 		},
 	})
 
+	# Timed quest — auto-fails if the player waits too long (180s).
+	# No good ending: retrieving the sample taints the world with violence.
+	QuestManager.register_quest({
+		"id": "unstable_sample",
+		"title": "The Decaying Sample",
+		"description": "A volatile ash sample is destabilizing nearby. Retrieve it before it dissolves — but touching it spreads corruption.",
+		"giver": "Shattered Scholar",
+		"force_affinity": "truth",
+		"time_limit": 180.0,
+		"objectives": [
+			{"id": "get_sample", "description": "Retrieve the unstable sample", "type": "collect", "target": "unstable_sample", "completed": false},
+			{"id": "return_sample", "description": "Return to the Scholar", "type": "talk", "target": "npc_scholar", "completed": false},
+		],
+		"rewards": {
+			"force": "truth", "force_amount": 5.0,
+			"faction": "truthseekers", "faction_amount": 8.0,
+		},
+	})
+
+	# Inaction quest — succeeds by doing NOTHING for 120s.
+	# The Scholar asks you to observe without interfering.
+	QuestManager.register_quest({
+		"id": "observe_the_pattern",
+		"title": "Observe the Pattern",
+		"description": "The Scholar asks you to stand still and watch the ash. Do nothing. Interfere with nothing. Just observe.",
+		"giver": "Shattered Scholar",
+		"force_affinity": "truth",
+		"inaction_reward_time": 120.0,
+		"objectives": [
+			{"id": "observe", "description": "Do nothing for two minutes", "type": "wait", "target": "patience", "completed": false},
+		],
+		"rewards": {
+			"force": "truth", "force_amount": 8.0,
+			"faction": "truthseekers", "faction_amount": 12.0,
+		},
+	})
+
 
 func _get_dialogue() -> Array:
 	# Ending reached — acknowledge the final state

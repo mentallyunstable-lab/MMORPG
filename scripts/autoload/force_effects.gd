@@ -45,6 +45,9 @@ func _process(delta: float) -> void:
 		_apply_passive_effects()
 		_check_atmospheric_callouts()
 
+	# Atmosphere updates every frame
+	_update_atmosphere(delta)
+
 
 func _on_force_changed(_force_name: String, _old: float, _new: float) -> void:
 	_recalculate()
@@ -160,3 +163,69 @@ func is_force_dominant_at(force_name: String, min_tier: String = "mid") -> bool:
 ## Get a modifier value (0.0 to 1.0+) for systems that scale with a force.
 func get_force_modifier(force_name: String) -> float:
 	return GameState.get_force(force_name) / 100.0
+
+
+# --- Silence Design (M1) ---
+# After god interactions and at extreme states: music fades, UI dims, sound echoes.
+# This exposes atmosphere values that AudioManager/HUD/Camera can read each frame.
+
+signal atmosphere_changed(silence_level: float, decay_level: float)
+
+var silence_level: float = 0.0  # 0=normal, 1=complete silence
+var decay_level: float = 0.0    # 0=normal, 1=full visual decay
+var _silence_timer: float = 0.0
+
+## Trigger a silence moment — music cuts, UI fades.
+## Called after god encounters, ending triggers, major world events.
+func trigger_silence(duration: float, intensity: float = 1.0) -> void:
+	_silence_timer = duration
+	silence_level = clampf(intensity, 0.0, 1.0)
+
+func _update_atmosphere(delta: float) -> void:
+	# Silence decay
+	if _silence_timer > 0:
+		_silence_timer -= delta
+		if _silence_timer <= 0:
+			_silence_timer = 0.0
+			silence_level = 0.0
+
+	# Passive silence from extreme states
+	var passive_silence := 0.0
+	if GameState.world_pressure >= 90.0:
+		passive_silence = 0.3
+	if GameState.save_closed:
+		passive_silence = 0.6  # Post-ending: the world is quieter
+	silence_level = maxf(silence_level, passive_silence)
+
+	# Visual decay scales with ashfall/corruption
+	var max_corruption := 0.0
+	for zone_id in GameState.region_state:
+		var region: Dictionary = GameState.get_region(zone_id)
+		max_corruption = maxf(max_corruption, region.get("corruption", 0.0))
+
+	# Decay from corruption + pressure
+	var target_decay := clampf(max_corruption / 100.0, 0.0, 1.0) * 0.6
+	target_decay += clampf((GameState.world_pressure - 50.0) / 50.0, 0.0, 1.0) * 0.4
+	if GameState.save_closed:
+		target_decay = 1.0  # Post-ending: full decay
+
+	decay_level = lerpf(decay_level, target_decay, delta * 0.5)
+
+	atmosphere_changed.emit(silence_level, decay_level)
+
+
+# --- Visual Decay (M2) ---
+# Fog, desaturation, particle chaos — applied via WorldEnvironment.
+# These are READ by ForceEnvironment or any camera script.
+
+## Get fog density (0-1) based on decay level.
+func get_fog_density() -> float:
+	return decay_level * 0.8
+
+## Get desaturation amount (0=full color, 1=grayscale).
+func get_desaturation() -> float:
+	return decay_level * 0.7
+
+## Get particle chaos multiplier (1=normal, 3=erratic).
+func get_particle_chaos() -> float:
+	return 1.0 + decay_level * 2.0
