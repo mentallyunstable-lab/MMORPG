@@ -35,10 +35,41 @@ func interact(_player: Node) -> void:
 	if DialogueManager.is_active:
 		return
 
+	# Check if faction is hostile — refuse dialogue
+	if _is_faction_hostile():
+		var refusal := _get_hostile_refusal()
+		DialogueManager.start_dialogue(refusal, npc_name)
+		return
+
 	var dialogue := _get_dialogue()
 	if dialogue.size() > 0:
 		DialogueManager.start_dialogue(dialogue, npc_name)
 		has_spoken = true
+
+
+## Check if this NPC's aligned faction is hostile to the player.
+func _is_faction_hostile() -> bool:
+	var faction_id := _get_faction_id()
+	if faction_id == "":
+		return false
+	return FactionManager.is_hostile(faction_id)
+
+
+## Get the faction id for this NPC based on force affinity.
+func _get_faction_id() -> String:
+	match force_affinity:
+		"faith": return "ashwalkers"
+		"truth": return "truthseekers"
+		"violence": return "ironvow"
+	return ""
+
+
+## What the NPC says when their faction hates the player.
+func _get_hostile_refusal() -> Array:
+	return [
+		{"speaker": npc_name, "text": "..."},
+		{"speaker": npc_name, "text": "I have nothing to say to you. Leave."},
+	]
 
 
 ## Override this to provide dynamic dialogue based on game state.
