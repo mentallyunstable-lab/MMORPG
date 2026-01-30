@@ -30,6 +30,8 @@ var patrol_target: Vector3 = Vector3.ZERO
 var attack_timer: float = 0.0
 var player_ref: Node3D = null
 var is_dead: bool = false
+var _is_telegraphing: bool = false
+var _mesh_node: MeshInstance3D = null
 
 
 func _ready() -> void:
@@ -37,6 +39,7 @@ func _ready() -> void:
 	health = max_health
 	home_position = global_position
 	_pick_patrol_target()
+	_mesh_node = _find_mesh()
 
 	# React to world pressure changes
 	GameState.force_changed.connect(_on_force_changed)
@@ -166,6 +169,17 @@ func _perform_attack() -> void:
 	if not player_ref.has_method("take_damage"):
 		return
 
+	# Telegraph — color flash before hit
+	_is_telegraphing = true
+	_telegraph_flash(Color(1.0, 0.2, 0.1))
+	await get_tree().create_timer(0.35).timeout
+	if not is_instance_valid(self) or is_dead:
+		return
+	_is_telegraphing = false
+
+	if not player_ref or not is_instance_valid(player_ref):
+		return
+
 	var dmg := attack_damage
 
 	# Faith-aligned enemies deal more when faith is low
@@ -248,6 +262,51 @@ func _pick_patrol_target() -> void:
 	patrol_target = home_position + offset
 
 
+func _find_mesh() -> MeshInstance3D:
+	for child in get_children():
+		if child is MeshInstance3D:
+			return child
+	return null
+
+
+## Flash enemy white on hit — called by PlayerController on melee impact.
+func hit_flash() -> void:
+	if not _mesh_node:
+		return
+	var mat := _mesh_node.get_surface_override_material(0)
+	if not mat or not mat is StandardMaterial3D:
+		mat = StandardMaterial3D.new()
+		mat.albedo_color = Color(0.6, 0.2, 0.2, 1)
+		_mesh_node.set_surface_override_material(0, mat)
+	var original_emission: bool = mat.emission_enabled
+	var original_energy: float = mat.emission_energy_multiplier
+	mat.emission_enabled = true
+	mat.emission = Color.WHITE
+	mat.emission_energy_multiplier = 3.0
+	await get_tree().create_timer(0.1).timeout
+	if is_instance_valid(self) and mat:
+		mat.emission_enabled = original_emission
+		mat.emission_energy_multiplier = original_energy
+
+
+## Flash enemy with telegraph color before attack.
+func _telegraph_flash(color: Color) -> void:
+	if not _mesh_node:
+		return
+	var mat := _mesh_node.get_surface_override_material(0)
+	if not mat or not mat is StandardMaterial3D:
+		mat = StandardMaterial3D.new()
+		mat.albedo_color = Color(0.6, 0.2, 0.2, 1)
+		_mesh_node.set_surface_override_material(0, mat)
+	mat.emission_enabled = true
+	mat.emission = color
+	mat.emission_energy_multiplier = 2.0
+	# Pulse via tween
+	var tween := create_tween().set_loops(2)
+	tween.tween_property(mat, "emission_energy_multiplier", 0.5, 0.15)
+	tween.tween_property(mat, "emission_energy_multiplier", 2.0, 0.15)
+
+
 # --- Lifecycle ---
 
 func _exit_tree() -> void:
@@ -276,6 +335,9 @@ func save_state() -> Dictionary:
 		"health": health,
 		"is_dead": is_dead,
 		"position": var_to_str(global_position),
+		"state": state,
+		"force_buff_applied": _force_buff_applied,
+		"home_position": var_to_str(home_position),
 	}
 
 
@@ -284,5 +346,10 @@ func load_state(data: Dictionary) -> void:
 	is_dead = data.get("is_dead", false)
 	if data.has("position"):
 		global_position = str_to_var(data["position"])
+	if data.has("home_position"):
+		home_position = str_to_var(data["home_position"])
+	_force_buff_applied = data.get("force_buff_applied", false)
 	if is_dead:
 		queue_free()
+	else:
+		state = data.get("state", State.IDLE)

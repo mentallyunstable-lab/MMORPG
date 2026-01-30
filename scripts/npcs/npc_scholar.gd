@@ -27,6 +27,10 @@ func _ready() -> void:
 
 
 func _get_dialogue() -> Array:
+	# Ending reached — acknowledge the final state
+	if WorldEventManager._ending_triggered:
+		return _dialogue_post_ending()
+
 	if QuestManager.is_quest_completed("void_fragment"):
 		return _dialogue_post_quest()
 
@@ -46,11 +50,11 @@ func _dialogue_offer_quest() -> Array:
 
 	var greeting := ""
 	if dominant == "faith" and GameState.faith > 50:
-		greeting = "Another pilgrim. I don't need prayers — I need data."
+		greeting = "The air is thick with devotion. Hard to see through it. I need something tangible."
 	elif dominant == "violence" and GameState.violence > 50:
 		greeting = "The world shakes with violence. Hard to study anything when the ground bleeds."
 	else:
-		greeting = "You. You look like someone who asks questions rather than prays."
+		greeting = "You. You look like someone who notices things."
 
 	return [
 		{"speaker": npc_name, "text": greeting},
@@ -101,6 +105,13 @@ func _dialogue_deliver_fragment() -> Array:
 func _dialogue_quest_reminder() -> Array:
 	return [
 		{"speaker": npc_name, "text": "The fragment should be near the eastern ruins. Look for something that looks like... nothing at all."},
+	]
+
+
+func _dialogue_post_ending() -> Array:
+	return [
+		{"speaker": npc_name, "text": "...The data is conclusive. Something fundamental has shifted."},
+		{"speaker": npc_name, "text": "Whatever was measured before — none of it applies now. We start from zero."},
 	]
 
 

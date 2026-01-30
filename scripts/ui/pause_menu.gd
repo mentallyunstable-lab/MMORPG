@@ -55,16 +55,18 @@ func _refresh_forces() -> void:
 	pressure_label.add_theme_color_override("font_color", Color(0.7, 0.5, 0.3))
 	force_summary.add_child(pressure_label)
 
-	var dominant_label := Label.new()
-	dominant_label.text = "Dominant: %s" % GameState.get_dominant_force().capitalize()
-	dominant_label.add_theme_font_size_override("font_size", 13)
-	force_summary.add_child(dominant_label)
+	var dominant_name := GameState.get_dominant_force()
+	var dominant_color: Color = Color.WHITE
+	match dominant_name:
+		"faith": dominant_color = Color(0.6, 0.7, 1.0)
+		"truth": dominant_color = Color(1.0, 1.0, 0.6)
+		"violence": dominant_color = Color(1.0, 0.4, 0.3)
 
-	var tier_label := Label.new()
-	tier_label.text = "Tier: %s" % ForceEffects.force_tier
-	tier_label.add_theme_font_size_override("font_size", 12)
-	tier_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-	force_summary.add_child(tier_label)
+	var dominant_label := Label.new()
+	dominant_label.text = ">> Dominant Force: %s (%s) <<" % [dominant_name.capitalize(), ForceEffects.force_tier]
+	dominant_label.add_theme_font_size_override("font_size", 14)
+	dominant_label.add_theme_color_override("font_color", dominant_color)
+	force_summary.add_child(dominant_label)
 
 
 func _add_force_row(parent: VBoxContainer, label_text: String, value: float, color: Color) -> void:
@@ -118,7 +120,7 @@ func _refresh_factions() -> void:
 		var attitude := FactionManager.get_attitude(faction_id)
 		var eff_rep := FactionManager.get_effective_reputation(faction_id)
 		var att_label := Label.new()
-		att_label.text = "%s (%.0f)" % [attitude.capitalize(), eff_rep]
+		att_label.text = "%s  |  Effective Rep: %.0f" % [attitude.capitalize(), eff_rep]
 		att_label.add_theme_font_size_override("font_size", 12)
 
 		match attitude:
@@ -154,7 +156,8 @@ func _refresh_gods() -> void:
 		hbox.add_child(name_label)
 
 		var state_label := Label.new()
-		state_label.text = "%s (%.0f)" % [state.capitalize(), stability]
+		var state_hint := _god_state_hint(state)
+		state_label.text = "%s (%.0f) — %s" % [state.capitalize(), stability, state_hint]
 		state_label.add_theme_font_size_override("font_size", 12)
 
 		match state:
@@ -173,6 +176,17 @@ func _refresh_gods() -> void:
 		hbox.add_child(state_label)
 
 		god_summary.add_child(hbox)
+
+
+func _god_state_hint(state: String) -> String:
+	match state:
+		"dead": return "Gone. Cannot return."
+		"fading": return "Barely present. Losing coherence."
+		"weakened": return "Struggling to hold form."
+		"dormant": return "Sleeping. Neither growing nor dying."
+		"manifest": return "Fully present. Actively shaping reality."
+		"ascended": return "Transcended. Beyond mortal influence."
+	return ""
 
 
 func _clear(container: VBoxContainer) -> void:

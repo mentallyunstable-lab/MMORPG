@@ -18,6 +18,15 @@ func _ready() -> void:
 	detail_panel.visible = false
 
 
+func _exit_tree() -> void:
+	if QuestManager:
+		if QuestManager.quest_accepted.is_connected(_on_quest_changed):
+			QuestManager.quest_accepted.disconnect(_on_quest_changed)
+		if QuestManager.quest_completed.is_connected(_on_quest_changed):
+			QuestManager.quest_completed.disconnect(_on_quest_changed)
+		# quest_updated uses a lambda — cannot disconnect by reference; it auto-cleans on free
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quest_log"):
 		visible = not visible
@@ -114,6 +123,8 @@ func _select_quest(quest_id: String) -> void:
 	for child in detail_objectives.get_children():
 		child.queue_free()
 
+	var is_completed: bool = q.get("state", 0) == QuestManager.QuestState.COMPLETED
+
 	var objectives: Array = q.get("objectives", [])
 	for obj in objectives:
 		var label := Label.new()
@@ -122,3 +133,33 @@ func _select_quest(quest_id: String) -> void:
 		label.add_theme_font_size_override("font_size", 13)
 		label.add_theme_color_override("font_color", Color(0.4, 0.7, 0.4) if done else Color(0.8, 0.8, 0.8))
 		detail_objectives.add_child(label)
+
+	# Show rewards section
+	var rewards: Dictionary = q.get("rewards", {})
+	if not rewards.is_empty():
+		var spacer := Control.new()
+		spacer.custom_minimum_size.y = 8
+		detail_objectives.add_child(spacer)
+
+		var header := Label.new()
+		header.text = "REWARDS" + (" (Collected)" if is_completed else "")
+		header.add_theme_font_size_override("font_size", 11)
+		header.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5) if is_completed else Color(0.7, 0.6, 0.3))
+		detail_objectives.add_child(header)
+
+		if rewards.has("force") and rewards.has("force_amount"):
+			var rl := Label.new()
+			rl.text = "  +%.0f %s" % [rewards["force_amount"], rewards["force"].capitalize()]
+			rl.add_theme_font_size_override("font_size", 12)
+			detail_objectives.add_child(rl)
+		if rewards.has("faction") and rewards.has("faction_amount"):
+			var rl := Label.new()
+			rl.text = "  +%.0f %s rep" % [rewards["faction_amount"], rewards["faction"]]
+			rl.add_theme_font_size_override("font_size", 12)
+			detail_objectives.add_child(rl)
+		if rewards.has("items"):
+			for item_id in rewards["items"]:
+				var rl := Label.new()
+				rl.text = "  %s" % ItemManager.get_item_name(item_id)
+				rl.add_theme_font_size_override("font_size", 12)
+				detail_objectives.add_child(rl)

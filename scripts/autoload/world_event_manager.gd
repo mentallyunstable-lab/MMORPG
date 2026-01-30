@@ -1,13 +1,16 @@
 ## WorldEventManager — Triggers one-time and recurring world events based on force thresholds,
 ## god states, faction attitudes, and region corruption.
 ## Events are the connective tissue between systems.
+## DO NOT WRITE INTO OTHER SINGLETONS DIRECTLY — use controlled APIs (add_force, set_god_stability, etc.)
 extends Node
 
 signal event_triggered(event_id: String, data: Dictionary)
 signal event_notification(title: String, description: String)
+signal ending_reached(ending_type: String, description: String)
 
 # Track which one-time events have fired
 var triggered_events: Dictionary = {}
+var _ending_triggered: bool = false
 
 # Pending event queue (for sequencing)
 var _event_queue: Array = []
@@ -44,7 +47,7 @@ func _check_threshold_events() -> void:
 	if GameState.violence >= 80.0:
 		_try_trigger("violence_world_crisis", {
 			"title": "The World Bleeds",
-			"description": "Unchecked violence has destabilized the region. Enemies grow stronger.",
+			"description": "Unchecked violence has destabilized the region. Enemies grow stronger.\n[Triggered by Violence >= 80]",
 			"effect": "enemy_buff",
 		})
 
@@ -52,7 +55,7 @@ func _check_threshold_events() -> void:
 	if GameState.faith >= 70.0 and GameState.truth < 30.0:
 		_try_trigger("blind_faith_rising", {
 			"title": "Blind Faith Rising",
-			"description": "Faith smothers inquiry. Technology fails. Miracles manifest.",
+			"description": "Faith smothers inquiry. Technology fails. Miracles manifest.\n[Triggered by high Faith, low Truth]",
 			"effect": "tech_suppression",
 		})
 
@@ -60,7 +63,7 @@ func _check_threshold_events() -> void:
 	if GameState.truth >= 70.0 and GameState.faith < 30.0:
 		_try_trigger("veil_torn", {
 			"title": "The Veil Torn",
-			"description": "Reality strips bare. The gods flicker. Nothing hides.",
+			"description": "Reality strips bare. The gods flicker. Nothing hides.\n[Triggered by high Truth, low Faith]",
 			"effect": "god_erosion",
 		})
 
@@ -68,21 +71,21 @@ func _check_threshold_events() -> void:
 	if GameState.faith >= 60.0 and GameState.truth >= 60.0:
 		_try_trigger("paradox_zone", {
 			"title": "Paradox Zone",
-			"description": "Faith and Truth collide. The world cannot reconcile both.",
+			"description": "Faith and Truth collide. The world cannot reconcile both.\n[Triggered by Faith + Truth both >= 60]",
 			"effect": "reality_fracture",
 		})
 
 	if GameState.violence >= 60.0 and GameState.faith >= 60.0:
 		_try_trigger("holy_war", {
 			"title": "Holy War",
-			"description": "Faith fuels violence. Crusaders march.",
+			"description": "Faith fuels violence. Crusaders march.\n[Triggered by Violence + Faith both >= 60]",
 			"effect": "faction_conflict",
 		})
 
 	if GameState.violence >= 60.0 and GameState.truth >= 60.0:
 		_try_trigger("revolution", {
 			"title": "Revolution",
-			"description": "Truth seen, violence chosen. The old order burns.",
+			"description": "Truth seen, violence chosen. The old order burns.\n[Triggered by Violence + Truth both >= 60]",
 			"effect": "faction_overthrow",
 		})
 
@@ -90,9 +93,10 @@ func _check_threshold_events() -> void:
 	if GameState.world_pressure >= 85.0:
 		_try_trigger("ashfall", {
 			"title": "Ashfall",
-			"description": "The world pressure exceeds what reality can contain. Ash falls from a sky that shouldn't exist.",
+			"description": "The world pressure exceeds what reality can contain. Ash falls from a sky that shouldn't exist.\n[Triggered by World Pressure >= 85]",
 			"effect": "world_transformation",
 		})
+		_check_ending("ashfall", "The ash falls. Reality buckles under the weight of all three forces.")
 
 	# --- Region corruption ---
 	for zone_id in GameState.region_state:
@@ -188,16 +192,27 @@ func _apply_event_effects(event_id: String, data: Dictionary) -> void:
 				GameState.set_region_value(zone_id, "fully_corrupted", true)
 
 
+## Check if an ending condition has been reached. Fires once.
+func _check_ending(ending_type: String, description: String) -> void:
+	if _ending_triggered:
+		return
+	_ending_triggered = true
+	ending_reached.emit(ending_type, description)
+	event_notification.emit("THE END", description)
+
+
 # --- Persistence ---
 
 func save_state() -> Dictionary:
 	return {
 		"triggered_events": triggered_events.duplicate(),
+		"ending_triggered": _ending_triggered,
 	}
 
 
 func load_state(save_data: Dictionary) -> void:
 	triggered_events = save_data.get("triggered_events", {})
+	_ending_triggered = save_data.get("ending_triggered", false)
 
 
 # --- Listener callbacks ---
@@ -220,8 +235,10 @@ func _on_god_state_changed(god_id: String, _old_state: String, new_state: String
 	match new_state:
 		"dead":
 			event_notification.emit("God Slain", "%s has fallen." % god_name)
+			_check_ending("god_death", "A god has died. The world will never be the same.")
 		"ascended":
 			event_notification.emit("God Ascended", "%s transcends." % god_name)
+			_check_ending("god_ascension", "A god has transcended. Faith remade the world.")
 		"fading":
 			event_notification.emit("God Fading", "%s grows dim..." % god_name)
 

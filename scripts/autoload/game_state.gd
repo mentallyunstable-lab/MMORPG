@@ -152,6 +152,7 @@ func save_state() -> Dictionary:
 		"region_state": region_state.duplicate(true),
 		"player_health": player_health,
 		"player_max_health": player_max_health,
+		"player_alive": player_alive,
 	}
 
 
@@ -164,3 +165,4 @@ func load_state(data: Dictionary) -> void:
 	region_state = data.get("region_state", {})
 	player_health = data.get("player_health", 100.0)
 	player_max_health = data.get("player_max_health", 100.0)
+	player_alive = data.get("player_alive", true)

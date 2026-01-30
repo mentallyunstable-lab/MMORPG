@@ -57,21 +57,21 @@ func _default_dialogue() -> Array:
 	match force_affinity:
 		"faith":
 			if dominant == "faith":
-				greeting = "The gods smile upon this land."
+				greeting = "The air hums. The old rites echo louder."
 			elif dominant == "truth":
-				greeting = "Your questioning shakes the pillars of belief..."
+				greeting = "Your questions pull at the threads of what was certain."
 			else:
-				greeting = "Blood stains even the sacred ground."
+				greeting = "Blood marks the ground here. The sacred and the brutal coexist."
 		"truth":
 			if dominant == "truth":
-				greeting = "Reality becomes clearer."
+				greeting = "Every surface is legible now. The world hides less."
 			elif dominant == "faith":
-				greeting = "Blind faith clouds what is real."
+				greeting = "Belief shapes what people see. That is simply how it works."
 			else:
-				greeting = "Violence solves nothing — only reveals."
+				greeting = "Violence changes what was. Observation records what is."
 		"violence":
 			if dominant == "violence":
-				greeting = "Strength rules. As it should."
+				greeting = "Strength rules here. That's how it is."
 			else:
 				greeting = "You haven't seen what I've seen."
 		_:

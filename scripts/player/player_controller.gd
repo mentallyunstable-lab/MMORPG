@@ -40,12 +40,14 @@ extends CharacterBody3D
 var input_enabled: bool = true
 var is_attacking: bool = false
 var is_dodging: bool = false
+var is_invulnerable: bool = false
 var is_dead: bool = false
 var dodge_timer: float = 0.0
 var dodge_direction: Vector3 = Vector3.ZERO
 var attack_timer: float = 0.0
 var current_interactable: Node = null
 var _spawn_position: Vector3 = Vector3.ZERO
+var _camera_shake_intensity: float = 0.0
 
 
 func _ready() -> void:
@@ -96,6 +98,16 @@ func _physics_process(delta: float) -> void:
 		dodge_timer -= delta
 		if dodge_timer <= 0:
 			is_dodging = false
+			is_invulnerable = false
+
+	# Camera shake decay
+	if _camera_shake_intensity > 0 and camera:
+		camera.h_offset = randf_range(-_camera_shake_intensity, _camera_shake_intensity)
+		camera.v_offset = randf_range(-_camera_shake_intensity, _camera_shake_intensity)
+		_camera_shake_intensity = move_toward(_camera_shake_intensity, 0.0, delta * 2.0)
+	elif camera:
+		camera.h_offset = 0.0
+		camera.v_offset = 0.0
 
 	# Gravity
 	if not is_on_floor():
@@ -164,11 +176,20 @@ func _melee_attack() -> void:
 	for body in melee_area.get_overlapping_bodies():
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
 			body.take_damage(melee_damage, global_position)
+			# Enemy hit flash
+			if body.has_method("hit_flash"):
+				body.hit_flash()
 			hit_count += 1
 
-	# Violence force increase on hit
+	# Hit feedback
 	if hit_count > 0:
 		GameState.add_force("violence", 0.5)
+		_camera_shake_intensity = 0.08
+		# Hitstop — brief freeze frame
+		Engine.time_scale = 0.05
+		await get_tree().create_timer(0.05 * 0.05).timeout  # Real-time ~0.0025s
+		if is_instance_valid(self):
+			Engine.time_scale = 1.0
 
 	# Brief attack state
 	await get_tree().create_timer(0.3).timeout
@@ -234,6 +255,7 @@ func _create_projectile() -> Projectile:
 
 func _start_dodge() -> void:
 	is_dodging = true
+	is_invulnerable = true
 	dodge_timer = dodge_duration
 
 	var input_dir := Vector2.ZERO
@@ -247,6 +269,12 @@ func _start_dodge() -> void:
 		var cam_basis := camera_pivot.global_transform.basis
 		dodge_direction = (cam_basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 		dodge_direction.y = 0
+
+	# Visual cue — brief scale squash + transparency
+	if mesh:
+		var tween := create_tween()
+		tween.tween_property(mesh, "scale", Vector3(1.2, 0.6, 1.2), dodge_duration * 0.3)
+		tween.tween_property(mesh, "scale", Vector3.ONE, dodge_duration * 0.7)
 
 
 # --- Interaction ---
@@ -277,7 +305,7 @@ func _try_interact() -> void:
 # --- Damage ---
 
 func take_damage(amount: float, _source_position: Vector3 = Vector3.ZERO) -> void:
-	if is_dead:
+	if is_dead or is_invulnerable:
 		return
 
 	GameState.player_health -= amount
