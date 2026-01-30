@@ -31,6 +31,20 @@ func _get_dialogue() -> Array:
 	if WorldEventManager._ending_triggered:
 		return _dialogue_post_ending()
 
+	# World memory — react to Null Throne death
+	if WorldMemory.has_memory("god_killed_null_throne"):
+		return [
+			{"speaker": npc_name, "text": "The Null Throne is... gone. The absence is absent."},
+			{"speaker": npc_name, "text": "I have spent my life studying something that no longer exists. What does that make me?"},
+		]
+
+	# React to ashfall
+	if WorldMemory.has_memory("event_ashfall"):
+		return [
+			{"speaker": npc_name, "text": "The ash falls from a sky that shouldn't exist. My instruments are useless."},
+			{"speaker": npc_name, "text": "This is beyond measurement. Beyond data. I don't know what to do with that."},
+		]
+
 	if QuestManager.is_quest_completed("void_fragment"):
 		return _dialogue_post_quest()
 

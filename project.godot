@@ -20,6 +20,8 @@ QuestManager="*res://scripts/autoload/quest_manager.gd"
 ItemManager="*res://scripts/autoload/item_manager.gd"
 WorldManager="*res://scripts/autoload/world_manager.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
+WorldMemory="*res://scripts/autoload/world_memory.gd"
+DebugTimer="*res://scripts/autoload/debug_timer.gd"
 
 [display]
 

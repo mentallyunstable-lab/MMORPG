@@ -67,13 +67,28 @@ func _recalculate_pressure() -> void:
 # --- Force API ---
 
 func add_force(force_name: String, amount: float) -> void:
+	var effective := _apply_diminishing_returns(force_name, amount)
 	match force_name:
 		"faith":
-			faith += amount
+			faith += effective
 		"truth":
-			truth += amount
+			truth += effective
 		"violence":
-			violence += amount
+			violence += effective
+
+
+## Diminishing returns: gains reduce as a force climbs.
+## At 0-50: full gain. At 50-80: 70% gain. At 80+: 40% gain.
+## Negative amounts (decay) are NOT diminished — penalties always hit full.
+func _apply_diminishing_returns(force_name: String, amount: float) -> float:
+	if amount <= 0:
+		return amount  # Losses always apply fully
+	var current := get_force(force_name)
+	if current >= 80.0:
+		return amount * 0.4
+	elif current >= 50.0:
+		return amount * 0.7
+	return amount
 
 
 func get_dominant_force() -> String:

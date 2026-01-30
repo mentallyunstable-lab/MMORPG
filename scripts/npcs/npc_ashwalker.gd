@@ -32,6 +32,19 @@ func _get_dialogue() -> Array:
 	if WorldEventManager._ending_triggered:
 		return _dialogue_post_ending()
 
+	# Quest permanently failed — remember and refuse
+	if WorldMemory.has_memory("ashwalker_quest_failed_hostility"):
+		return [
+			{"speaker": npc_name, "text": "The relic is gone. Because of you. There is nothing left to discuss."},
+		]
+
+	# World memory — react to god deaths
+	if WorldMemory.has_memory("god_killed_verath"):
+		return [
+			{"speaker": npc_name, "text": "Verath is gone. Do you understand what you've done?"},
+			{"speaker": npc_name, "text": "The ash grows cold. There will be no more cycles."},
+		]
+
 	# Quest complete
 	if QuestManager.is_quest_completed("ash_relic"):
 		return _dialogue_post_quest()
@@ -79,6 +92,21 @@ func _dialogue_offer_quest() -> Array:
 
 func interact(player: Node) -> void:
 	if DialogueManager.is_active:
+		return
+
+	# Faction hostile — refuse dialogue and permanently fail active quest
+	if _is_faction_hostile():
+		if QuestManager.is_quest_active("ash_relic"):
+			QuestManager.fail_quest("ash_relic")
+			WorldMemory.record("ashwalker_quest_failed_hostility")
+			var refusal := [
+				{"speaker": npc_name, "text": "You have gone too far. The Ash Walkers want nothing from you."},
+				{"speaker": npc_name, "text": "The relic will remain lost. That is your doing."},
+			]
+			DialogueManager.start_dialogue(refusal, npc_name)
+		else:
+			var refusal := _get_hostile_refusal()
+			DialogueManager.start_dialogue(refusal, npc_name)
 		return
 
 	var dialogue := _get_dialogue()

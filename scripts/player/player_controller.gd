@@ -23,6 +23,13 @@ extends CharacterBody3D
 @export var ranged_speed: float = 30.0
 @export var attack_cooldown: float = 0.4
 
+# --- Stamina ---
+@export var max_stamina: float = 100.0
+@export var stamina_regen: float = 20.0  # per second
+@export var dodge_stamina_cost: float = 30.0
+@export var attack_stamina_cost: float = 15.0
+@export var stamina_regen_delay: float = 0.8  # seconds after last use before regen starts
+
 # --- Respawn ---
 @export var respawn_delay: float = 2.0
 
@@ -48,6 +55,9 @@ var attack_timer: float = 0.0
 var current_interactable: Node = null
 var _spawn_position: Vector3 = Vector3.ZERO
 var _camera_shake_intensity: float = 0.0
+var stamina: float = 100.0
+var _stamina_regen_timer: float = 0.0
+var _dodge_recovery: bool = false  # Vulnerability window after dodge ends
 
 
 func _ready() -> void:
@@ -99,6 +109,17 @@ func _physics_process(delta: float) -> void:
 		if dodge_timer <= 0:
 			is_dodging = false
 			is_invulnerable = false
+			# Dodge recovery vulnerability — brief window where you take 1.5x damage
+			_dodge_recovery = true
+			await get_tree().create_timer(0.15).timeout
+			if is_instance_valid(self):
+				_dodge_recovery = false
+
+	# Stamina regen
+	if _stamina_regen_timer > 0:
+		_stamina_regen_timer -= delta
+	elif stamina < max_stamina:
+		stamina = minf(stamina + stamina_regen * delta, max_stamina)
 
 	# Camera shake decay
 	if _camera_shake_intensity > 0 and camera:
@@ -144,15 +165,15 @@ func _physics_process(delta: float) -> void:
 			velocity.x = move_toward(velocity.x, 0, speed * delta * 10.0)
 			velocity.z = move_toward(velocity.z, 0, speed * delta * 10.0)
 
-	# Dodge
-	if Input.is_action_just_pressed("dodge") and not is_dodging and is_on_floor():
+	# Dodge (requires stamina)
+	if Input.is_action_just_pressed("dodge") and not is_dodging and is_on_floor() and stamina >= dodge_stamina_cost:
 		_start_dodge()
 
-	# Combat
-	if Input.is_action_just_pressed("attack_melee") and attack_timer <= 0 and not is_dodging:
+	# Combat (requires stamina)
+	if Input.is_action_just_pressed("attack_melee") and attack_timer <= 0 and not is_dodging and stamina >= attack_stamina_cost:
 		_melee_attack()
 
-	if Input.is_action_just_pressed("attack_ranged") and attack_timer <= 0 and not is_dodging:
+	if Input.is_action_just_pressed("attack_ranged") and attack_timer <= 0 and not is_dodging and stamina >= attack_stamina_cost:
 		_ranged_attack()
 
 	# Interaction
@@ -170,6 +191,7 @@ func _physics_process(delta: float) -> void:
 func _melee_attack() -> void:
 	is_attacking = true
 	attack_timer = attack_cooldown
+	_consume_stamina(attack_stamina_cost)
 
 	# Deal damage to all bodies in melee area
 	var hit_count := 0
@@ -184,6 +206,7 @@ func _melee_attack() -> void:
 	# Hit feedback
 	if hit_count > 0:
 		GameState.add_force("violence", 0.5)
+		DebugTimer.mark_first_combat()
 		_camera_shake_intensity = 0.08
 		# Hitstop — brief freeze frame
 		Engine.time_scale = 0.05
@@ -200,6 +223,7 @@ func _melee_attack() -> void:
 func _ranged_attack() -> void:
 	is_attacking = true
 	attack_timer = attack_cooldown
+	_consume_stamina(attack_stamina_cost)
 
 	# Spawn projectile
 	var projectile := _create_projectile()
@@ -257,6 +281,7 @@ func _start_dodge() -> void:
 	is_dodging = true
 	is_invulnerable = true
 	dodge_timer = dodge_duration
+	_consume_stamina(dodge_stamina_cost)
 
 	var input_dir := Vector2.ZERO
 	input_dir.x = Input.get_axis("move_left", "move_right")
@@ -308,7 +333,10 @@ func take_damage(amount: float, _source_position: Vector3 = Vector3.ZERO) -> voi
 	if is_dead or is_invulnerable:
 		return
 
-	GameState.player_health -= amount
+	# Dodge recovery vulnerability — 1.5x damage right after dodge ends
+	var effective_amount := amount * (1.5 if _dodge_recovery else 1.0)
+
+	GameState.player_health -= effective_amount
 	if GameState.player_health <= 0:
 		GameState.player_health = 0
 		GameState.player_alive = false
@@ -336,6 +364,7 @@ func _respawn() -> void:
 	input_enabled = true
 	GameState.player_health = GameState.player_max_health
 	GameState.player_alive = true
+	stamina = max_stamina
 	global_position = _spawn_position
 
 	# Restore scale
@@ -348,6 +377,13 @@ func _respawn() -> void:
 
 func heal(amount: float) -> void:
 	GameState.player_health = min(GameState.player_health + amount, GameState.player_max_health)
+
+
+# --- Stamina ---
+
+func _consume_stamina(amount: float) -> void:
+	stamina = maxf(stamina - amount, 0.0)
+	_stamina_regen_timer = stamina_regen_delay
 
 
 # --- External API ---
