@@ -77,9 +77,11 @@ func _on_interact(player: Node) -> void:
 func save_state() -> Dictionary:
 	var base := super.save_state()
 	base["times_used"] = times_used
+	base["cooldown_remaining"] = _cooldown_timer
 	return base
 
 
 func load_state(data: Dictionary) -> void:
 	super.load_state(data)
 	times_used = data.get("times_used", 0)
+	_cooldown_timer = data.get("cooldown_remaining", 0.0)

@@ -25,6 +25,18 @@ func _ready() -> void:
 	panel.visible = false
 
 
+func _exit_tree() -> void:
+	if DialogueManager:
+		if DialogueManager.dialogue_started.is_connected(_on_dialogue_started):
+			DialogueManager.dialogue_started.disconnect(_on_dialogue_started)
+		if DialogueManager.dialogue_line.is_connected(_on_dialogue_line):
+			DialogueManager.dialogue_line.disconnect(_on_dialogue_line)
+		if DialogueManager.dialogue_choices_presented.is_connected(_on_choices_presented):
+			DialogueManager.dialogue_choices_presented.disconnect(_on_choices_presented)
+		if DialogueManager.dialogue_ended.is_connected(_on_dialogue_ended):
+			DialogueManager.dialogue_ended.disconnect(_on_dialogue_ended)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not DialogueManager.is_active:
 		return

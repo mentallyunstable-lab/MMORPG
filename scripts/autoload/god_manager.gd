@@ -1,6 +1,7 @@
 ## GodManager — Tracks gods, their stability, and how they manifest (or die).
 ## Gods weaken when Truth rises. Gods strengthen when Faith rises.
 ## Violence accelerates whatever is already happening.
+## DO NOT WRITE INTO OTHER SINGLETONS DIRECTLY — use controlled APIs (add_force, set_god_stability, etc.)
 extends Node
 
 signal god_state_changed(god_id: String, old_state: String, new_state: String)

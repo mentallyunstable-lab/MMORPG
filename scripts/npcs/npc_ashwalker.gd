@@ -28,6 +28,10 @@ func _ready() -> void:
 
 
 func _get_dialogue() -> Array:
+	# Ending reached — acknowledge the final state
+	if WorldEventManager._ending_triggered:
+		return _dialogue_post_ending()
+
 	# Quest complete
 	if QuestManager.is_quest_completed("ash_relic"):
 		return _dialogue_post_quest()
@@ -97,8 +101,8 @@ func _dialogue_deliver_relic() -> Array:
 		{"speaker": npc_name, "text": "You found it... I can feel Verath's warmth even now."},
 		{"speaker": npc_name, "text": "Thank you, traveler. The Ash Walkers will remember this.",
 			"choices": [
-				{"text": "Faith guides us all.", "force": "faith", "amount": 3.0},
-				{"text": "Just doing what's right.", "force": "truth", "amount": 1.0},
+				{"text": "The rites must continue.", "force": "faith", "amount": 3.0},
+				{"text": "It belonged somewhere. Now it does.", "force": "truth", "amount": 1.0},
 				{"text": "You owe me.", "force": "violence", "amount": 2.0},
 			]
 		},
@@ -109,6 +113,13 @@ func _dialogue_quest_reminder() -> Array:
 	return [
 		{"speaker": npc_name, "text": "The relic... have you found it? It should be in the ruins to the north."},
 		{"speaker": npc_name, "text": "It hums with warmth. Verath's warmth. You'll know it when you're close."},
+	]
+
+
+func _dialogue_post_ending() -> Array:
+	return [
+		{"speaker": npc_name, "text": "...It's over, isn't it. I can feel it in the ash — the world has chosen its shape."},
+		{"speaker": npc_name, "text": "Whatever comes next... the Ash Walkers will endure. We always have."},
 	]
 
 

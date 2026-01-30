@@ -12,6 +12,11 @@ func _ready() -> void:
 	WorldEventManager.event_notification.connect(_on_event_notification)
 
 
+func _exit_tree() -> void:
+	if WorldEventManager and WorldEventManager.event_notification.is_connected(_on_event_notification):
+		WorldEventManager.event_notification.disconnect(_on_event_notification)
+
+
 func _on_event_notification(title: String, description: String) -> void:
 	if title == "" and description == "":
 		return

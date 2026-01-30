@@ -71,7 +71,7 @@ func _dialogue_dead(god_name: String) -> Array:
 			"choices": [
 				{"text": "Pray anyway.", "force": "faith", "amount": 3.0},
 				{"text": "Acknowledge the absence.", "force": "truth", "amount": 2.0},
-				{"text": "Good riddance.", "force": "violence", "amount": 2.0},
+				{"text": "It's done. Move on.", "force": "violence", "amount": 2.0},
 			]
 		},
 	]
@@ -134,7 +134,7 @@ func _dialogue_manifest(god_name: String, stability: float) -> Array:
 		{"speaker": "Narration", "text": "%s is fully manifest. The air shimmers. Stability: %.0f." % [god_name, stability]},
 		{"speaker": god_name, "text": "You have given me form. What is your desire?",
 			"choices": [
-				{"text": "Protect this world. (+Faith)", "force": "faith", "amount": faith_cost, "next_id": "protect"},
+				{"text": "Sustain this world. (+Faith)", "force": "faith", "amount": faith_cost, "next_id": "protect"},
 				{"text": "Show me the truth behind divinity. (+Truth)", "force": "truth", "amount": truth_cost, "next_id": "reveal"},
 				{"text": "Destroy my enemies. (+Violence)", "force": "violence", "amount": 5.0, "next_id": "wrath"},
 			]
@@ -152,7 +152,7 @@ func _dialogue_ascended(god_name: String) -> Array:
 		{"speaker": god_name, "text": "Kneel, question, or challenge. All paths lead to ash.",
 			"choices": [
 				{"text": "Kneel. (+Faith)", "force": "faith", "amount": 8.0},
-				{"text": "I will not kneel to a pattern. (+Truth)", "force": "truth", "amount": 8.0},
+				{"text": "I question the pattern. (+Truth)", "force": "truth", "amount": 8.0},
 				{"text": "Even gods can bleed. (+Violence)", "force": "violence", "amount": 8.0},
 			]
 		},
@@ -162,9 +162,11 @@ func _dialogue_ascended(god_name: String) -> Array:
 func save_state() -> Dictionary:
 	var base := super.save_state()
 	base["encounter_triggered"] = _encounter_triggered
+	base["cooldown_remaining"] = _cooldown_timer
 	return base
 
 
 func load_state(data: Dictionary) -> void:
 	super.load_state(data)
 	_encounter_triggered = data.get("encounter_triggered", false)
+	_cooldown_timer = data.get("cooldown_remaining", 0.0)

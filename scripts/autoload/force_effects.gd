@@ -1,5 +1,6 @@
 ## ForceEffects — Processes world-wide consequences of Faith/Truth/Violence levels.
 ## Attached to the scene tree via autoload. Runs every tick, applying force effects.
+## DO NOT WRITE INTO OTHER SINGLETONS DIRECTLY — use controlled APIs (add_force, set_god_stability, etc.)
 extends Node
 
 # --- Thresholds ---
@@ -16,8 +17,16 @@ var _timer: float = 0.0
 var dominant_force: String = ""
 var force_tier: String = "none"  # "none", "low", "mid", "high", "critical"
 
+# Minimum time between tier change signals to prevent oscillation spam
+const TIER_CHANGE_COOLDOWN := 3.0
+var _tier_cooldown: float = 0.0
+
 signal force_tier_changed(force_name: String, tier: String)
 signal world_effect_triggered(effect_id: String, data: Dictionary)
+
+# Atmospheric callout cooldown — one callout per 15s max
+const CALLOUT_COOLDOWN := 15.0
+var _callout_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -27,9 +36,14 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_timer += delta
+	if _tier_cooldown > 0:
+		_tier_cooldown -= delta
+	if _callout_timer > 0:
+		_callout_timer -= delta
 	if _timer >= EFFECT_INTERVAL:
 		_timer = 0.0
 		_apply_passive_effects()
+		_check_atmospheric_callouts()
 
 
 func _on_force_changed(_force_name: String, _old: float, _new: float) -> void:
@@ -54,7 +68,8 @@ func _recalculate() -> void:
 	else:
 		force_tier = "none"
 
-	if old_tier != force_tier or old_dominant != dominant_force:
+	if (old_tier != force_tier or old_dominant != dominant_force) and _tier_cooldown <= 0:
+		_tier_cooldown = TIER_CHANGE_COOLDOWN
 		force_tier_changed.emit(dominant_force, force_tier)
 
 
@@ -69,7 +84,7 @@ func _apply_passive_effects() -> void:
 			GameState.set_god_stability(god_name, current + 0.5)
 		# High faith slowly reduces violence
 		if GameState.violence > 0:
-			GameState.violence -= 0.1
+			GameState.add_force("violence", -0.1)
 
 	if GameState.faith >= CRITICAL_THRESHOLD:
 		# Critical faith — miracles manifest, tech degrades
@@ -83,7 +98,7 @@ func _apply_passive_effects() -> void:
 			GameState.set_god_stability(god_name, current - 0.8)
 		# High truth slowly reduces faith
 		if GameState.faith > 0:
-			GameState.faith -= 0.15
+			GameState.add_force("faith", -0.15)
 
 	if GameState.truth >= CRITICAL_THRESHOLD:
 		# Critical truth — reality glitches
@@ -106,6 +121,32 @@ func _apply_passive_effects() -> void:
 	if GameState.world_pressure >= 80.0:
 		# Extreme combined pressure — everything reacts
 		world_effect_triggered.emit("pressure_overload", {"pressure": GameState.world_pressure})
+
+
+## Atmospheric world reaction callouts — so the player understands what's happening.
+func _check_atmospheric_callouts() -> void:
+	if _callout_timer > 0:
+		return
+
+	var callout := ""
+	if GameState.faith >= CRITICAL_THRESHOLD:
+		callout = "The air hums with devotion. The gods stir."
+	elif GameState.truth >= CRITICAL_THRESHOLD:
+		callout = "Reality fractures slightly. Nothing is hidden."
+	elif GameState.violence >= CRITICAL_THRESHOLD:
+		callout = "The ground shakes. Blood calls to blood."
+	elif GameState.world_pressure >= 80.0:
+		callout = "The world groans under the weight of all three forces."
+	elif GameState.faith >= HIGH_THRESHOLD:
+		callout = "The air feels heavier... prayers linger."
+	elif GameState.truth >= HIGH_THRESHOLD:
+		callout = "Shadows sharpen. Details emerge unbidden."
+	elif GameState.violence >= HIGH_THRESHOLD:
+		callout = "Something feral stirs at the edge of hearing."
+
+	if callout != "":
+		_callout_timer = CALLOUT_COOLDOWN
+		WorldEventManager.event_notification.emit("World", callout)
 
 
 ## Query: is a specific force dominant and above a threshold?
