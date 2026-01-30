@@ -47,6 +47,11 @@ func _process(_delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player and player is PlayerController:
 		interact_prompt.visible = player.current_interactable != null
+		# Show stamina feedback — dim HUD when stamina is low
+		if player.stamina < 20.0:
+			modulate.a = lerpf(modulate.a, 0.6, _delta * 3.0)
+		else:
+			modulate.a = lerpf(modulate.a, 1.0, _delta * 3.0)
 	else:
 		interact_prompt.visible = false
 
@@ -54,6 +59,9 @@ func _process(_delta: float) -> void:
 	_update_bar_effects(faith_bar, GameState.faith, FORCE_COLORS["faith"])
 	_update_bar_effects(truth_bar, GameState.truth, FORCE_COLORS["truth"])
 	_update_bar_effects(violence_bar, GameState.violence, FORCE_COLORS["violence"])
+
+	# Subtle save degradation — UI corruption at extreme states
+	_apply_degradation_effects()
 
 
 func _on_force_changed(force_name: String, old_value: float, new_value: float) -> void:
@@ -117,3 +125,35 @@ func _pulse_screen_tint(force_name: String, delta_val: float) -> void:
 	_tint_overlay.color = Color(color.r, color.g, color.b, intensity)
 	var tween := create_tween()
 	tween.tween_property(_tint_overlay, "color:a", 0.0, 0.6)
+
+
+## Subtle UI corruption after extreme states. Not explained.
+func _apply_degradation_effects() -> void:
+	var pressure := GameState.world_pressure
+
+	# Bar jitter at high pressure — bars twitch slightly
+	if pressure >= 75.0:
+		var jitter := (pressure - 75.0) / 25.0  # 0-1 at 75-100
+		if faith_bar:
+			faith_bar.position.x = faith_bar.get_meta("_base_x", faith_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
+			if not faith_bar.has_meta("_base_x"):
+				faith_bar.set_meta("_base_x", faith_bar.position.x)
+		if truth_bar:
+			truth_bar.position.x = truth_bar.get_meta("_base_x", truth_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
+			if not truth_bar.has_meta("_base_x"):
+				truth_bar.set_meta("_base_x", truth_bar.position.x)
+		if violence_bar:
+			violence_bar.position.x = violence_bar.get_meta("_base_x", violence_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
+			if not violence_bar.has_meta("_base_x"):
+				violence_bar.set_meta("_base_x", violence_bar.position.x)
+
+	# Health bar flickers when ending has triggered
+	if GameState.save_closed and health_bar:
+		health_bar.modulate.a = 0.3 + randf() * 0.4  # Ghostly flicker
+
+	# Interact prompt glitches at extreme states
+	if interact_prompt and interact_prompt.visible and pressure >= 85.0:
+		if randf() < 0.05:  # 5% chance per frame
+			interact_prompt.text = "[???]"
+		else:
+			interact_prompt.text = "[E] Interact"

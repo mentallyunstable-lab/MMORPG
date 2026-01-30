@@ -351,7 +351,7 @@ func _die() -> void:
 	# Visual death feedback — fade mesh
 	if mesh:
 		var tween := create_tween()
-		tween.tween_property(mesh, "modulate" if mesh is CanvasItem else "scale", Vector3(0.8, 0.2, 0.8), 0.5)
+		tween.tween_property(mesh, "scale", Vector3(0.8, 0.2, 0.8), 0.5)
 
 	# Respawn after delay
 	await get_tree().create_timer(respawn_delay).timeout

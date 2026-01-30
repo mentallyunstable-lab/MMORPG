@@ -148,6 +148,57 @@ func fail_quest(quest_id: String) -> void:
 	if quests.has(quest_id) and quests[quest_id]["state"] == QuestState.ACTIVE:
 		quests[quest_id]["state"] = QuestState.FAILED
 		quest_failed.emit(quest_id)
+		WorldEventManager.event_notification.emit(
+			"Quest Failed", quests[quest_id].get("title", quest_id))
+		WorldMemory.record("quest_failed_%s" % quest_id)
+
+
+# --- Timed Quests ---
+# Quests with "time_limit" (seconds) auto-fail when time runs out.
+# Quests with "inaction_reward_time" succeed if the player does NOTHING for that long.
+
+func _process(delta: float) -> void:
+	for qid in quests:
+		var q: Dictionary = quests[qid]
+		if q["state"] != QuestState.ACTIVE:
+			continue
+
+		# Tick elapsed time
+		q["_elapsed"] = q.get("_elapsed", 0.0) + delta
+
+		# Auto-fail: time ran out
+		if q.has("time_limit"):
+			if q["_elapsed"] >= q["time_limit"]:
+				fail_quest(qid)
+
+		# Inaction success: player did nothing for long enough
+		if q.has("inaction_reward_time"):
+			var inaction: float = q.get("_inaction_timer", 0.0) + delta
+			q["_inaction_timer"] = inaction
+			if inaction >= q["inaction_reward_time"]:
+				# Complete by doing nothing
+				for obj in q.get("objectives", []):
+					obj["completed"] = true
+				q["state"] = QuestState.COMPLETED
+				_grant_rewards(q)
+				quest_completed.emit(qid)
+				WorldMemory.record("quest_inaction_success_%s" % qid)
+
+
+## Reset inaction timer — called when the player takes any quest-related action.
+func reset_inaction(quest_id: String) -> void:
+	if quests.has(quest_id):
+		quests[quest_id]["_inaction_timer"] = 0.0
+
+
+## Get remaining time for a timed quest (or -1 if untimed).
+func get_time_remaining(quest_id: String) -> float:
+	if not quests.has(quest_id):
+		return -1.0
+	var q: Dictionary = quests[quest_id]
+	if not q.has("time_limit"):
+		return -1.0
+	return maxf(q["time_limit"] - q.get("_elapsed", 0.0), 0.0)
 
 
 # --- Persistence ---

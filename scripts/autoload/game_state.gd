@@ -155,6 +155,75 @@ func set_region_value(zone_id: String, key: String, value: Variant) -> void:
 	region[key] = value
 
 
+# --- Ending Lock-in ---
+# Once an ending triggers, the save is "closed". No reloading to before the ending.
+var save_closed: bool = false
+var ending_type: String = ""
+var ending_message: String = ""
+
+const SAVE_PATH := "user://ashborn_save.dat"
+const CLOSED_MESSAGE := "This world has concluded."
+
+
+## Save the game to disk. If ending has triggered, marks save as closed.
+func save_game() -> void:
+	var data := save_state()
+	data["save_closed"] = save_closed
+	data["ending_type"] = ending_type
+	data["ending_message"] = ending_message
+	data["world_memory"] = WorldMemory.save_state()
+	data["god_attention"] = GodManager.save_attention()
+	data["quests"] = QuestManager.save_state()
+
+	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data))
+		file.close()
+
+
+## Load the game from disk. Refuses to load if save is closed.
+func load_game() -> bool:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+
+	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if not file:
+		return false
+
+	var json := JSON.new()
+	var err := json.parse(file.get_as_text())
+	file.close()
+	if err != OK:
+		return false
+
+	var data: Dictionary = json.data
+
+	# ENDING LOCK-IN: if save is closed, show message and refuse
+	if data.get("save_closed", false):
+		save_closed = true
+		ending_type = data.get("ending_type", "")
+		ending_message = data.get("ending_message", CLOSED_MESSAGE)
+		WorldEventManager.event_notification.emit("THE END", ending_message)
+		return false
+
+	load_state(data)
+	if data.has("world_memory"):
+		WorldMemory.load_state(data["world_memory"])
+	if data.has("god_attention"):
+		GodManager.load_attention(data["god_attention"])
+	if data.has("quests"):
+		QuestManager.load_state(data["quests"])
+	return true
+
+
+## Called when an ending is reached — locks the save permanently.
+func lock_ending(type: String, message: String) -> void:
+	save_closed = true
+	ending_type = type
+	ending_message = message
+	save_game()
+
+
 # --- Serialization (save/load) ---
 
 func save_state() -> Dictionary:

@@ -36,6 +36,13 @@ func _on_interact(player: Node) -> void:
 	var state := GodManager.get_god_state(god_id)
 	var stability := GameState.get_god_stability(god_id)
 
+	# God notices the player seeking them out
+	GodManager.add_god_attention(god_id, 10.0)
+	GodManager.mark_god_interaction(god_id)
+
+	# Silence moment after god encounter — world holds its breath
+	ForceEffects.trigger_silence(4.0, 0.8)
+
 	var dialogue := _build_encounter_dialogue(god_name, state, stability)
 	DialogueManager.start_dialogue(dialogue, god_name)
 
