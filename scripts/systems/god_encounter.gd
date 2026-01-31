@@ -27,6 +27,15 @@ func _on_interact(player: Node) -> void:
 	if DialogueManager.is_active:
 		return
 
+	# --- Witness Mode (Step 6): Silent gods. No UI effects. Just emptiness. ---
+	if GameState.witness_mode:
+		var god_name := GodManager.get_god_name(god_id)
+		DialogueManager.start_dialogue([
+			{"speaker": "...", "text": "The place where %s once held court." % god_name},
+			{"speaker": "...", "text": "There is nothing here. No warmth, no judgment, no absence. Just stone."},
+		], "...")
+		return
+
 	if _cooldown_timer > 0:
 		return
 
@@ -43,6 +52,10 @@ func _on_interact(player: Node) -> void:
 	# Silence moment after god encounter — world holds its breath
 	ForceEffects.trigger_silence(4.0, 0.8)
 
+	# --- Pre-Obsession Indirect Pressure (Step 3) ---
+	# The god never fully appears. Effects are indirect. "Something noticed me."
+	_apply_indirect_pressure(god_id, state, player)
+
 	var dialogue := _build_encounter_dialogue(god_name, state, stability)
 	DialogueManager.start_dialogue(dialogue, god_name)
 
@@ -52,6 +65,42 @@ func _on_interact(player: Node) -> void:
 			"God Encounter",
 			"You stand before %s." % god_name
 		)
+
+
+## Indirect god pressure — effects during encounter, not combat.
+## Verath heals without consent. Kael exposes truth. Null Throne erases.
+func _apply_indirect_pressure(gid: String, state: String, player: Node) -> void:
+	if state == "dead":
+		return
+
+	match gid:
+		"verath":
+			# Forced healing — wounds close without permission
+			if player.has_method("heal") and GameState.player_health < GameState.player_max_health:
+				player.heal(randf_range(3.0, 12.0))
+			# Nearby enemies freeze briefly — the cycle pauses
+			for enemy in get_tree().get_nodes_in_group("enemies"):
+				if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) < 20.0:
+					enemy.set_physics_process(false)
+					_restore_enemy_after(enemy, 2.0)
+
+		"kael":
+			# Judgment — truth forced, pretense stripped
+			GameState.add_force("truth", 1.5)
+			GodManager.god_event.emit(gid, "ui_distortion", {"intensity": 0.3, "duration": 3.0})
+
+		"null_throne":
+			# The absence taxes everything — deeper silence, force drain
+			ForceEffects.trigger_silence(6.0, 0.95)
+			GameState.add_force("faith", -0.5)
+			GameState.add_force("truth", -0.5)
+			GameState.add_force("violence", -0.5)
+
+
+func _restore_enemy_after(enemy: Node, delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if is_instance_valid(enemy):
+		enemy.set_physics_process(true)
 
 
 func _build_encounter_dialogue(god_name: String, state: String, stability: float) -> Array:

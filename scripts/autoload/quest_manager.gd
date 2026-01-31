@@ -108,11 +108,44 @@ func _grant_rewards(quest_data: Dictionary) -> void:
 		for item_id in rewards["items"]:
 			ItemManager.add_item(item_id)
 
+	# --- Faction Triangle (Step 4) ---
+	# Completing a quest for one faction destabilizes the others.
+	# You cannot fully satisfy all three. Someone always loses.
+	var affinity: String = quest_data.get("force_affinity", "")
+	if affinity != "" and affinity != "neutral":
+		_apply_faction_triangle(affinity, quest_data)
+
 	# Notify
 	WorldEventManager.event_notification.emit(
 		"Quest Complete",
 		quest_data.get("title", "Unknown quest")
 	)
+
+
+## Faction triangle: helping one force-aligned faction hurts the others.
+## Faith quests anger truth factions (and vice versa). Violence quests anger everyone.
+func _apply_faction_triangle(affinity: String, quest_data: Dictionary) -> void:
+	var opposing_factions: Array = []
+	var penalty := 0.0
+
+	match affinity:
+		"faith":
+			opposing_factions = FactionManager.get_factions_by_force("truth")
+			penalty = -8.0
+			for vid in FactionManager.get_factions_by_force("violence"):
+				GameState.change_faction_reputation(vid, -3.0)
+		"truth":
+			opposing_factions = FactionManager.get_factions_by_force("faith")
+			penalty = -8.0
+		"violence":
+			opposing_factions = FactionManager.get_factions_by_force("faith")
+			opposing_factions.append_array(FactionManager.get_factions_by_force("truth"))
+			penalty = -5.0
+
+	for faction_id in opposing_factions:
+		GameState.change_faction_reputation(faction_id, penalty)
+
+	WorldMemory.record_ambient("Completed %s — opposing factions destabilized" % quest_data.get("title", "quest"))
 
 
 ## Get all active quests.

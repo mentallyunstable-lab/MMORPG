@@ -157,16 +157,44 @@ func _state_attack(delta: float) -> void:
 	var to_player := (player_ref.global_position - global_position).normalized()
 	_face_direction(to_player, delta)
 
-	# Attack on cooldown
+	# Attack on cooldown — violence makes enemies attack faster
 	if attack_timer <= 0:
 		_perform_attack()
-		attack_timer = attack_cooldown
+		var cd := attack_cooldown
+		if GameState.violence >= 70.0:
+			cd *= maxf(1.0 - (GameState.violence - 70.0) / 100.0, 0.5)  # Up to 50% faster
+		attack_timer = cd
 
 
 func _perform_attack() -> void:
 	if not player_ref or not is_instance_valid(player_ref):
 		return
 	if not player_ref.has_method("take_damage"):
+		return
+
+	# --- Force-Modified Combat (Step 5) ---
+
+	# HIGH TRUTH: Enemy abilities fail — attacks misfire (chance to skip)
+	if GameState.truth >= 70.0:
+		var fail_chance := (GameState.truth - 70.0) / 100.0  # 0-0.3 at 70-100
+		if randf() < fail_chance:
+			# Attack misfires — enemy staggers instead
+			_telegraph_flash(Color(0.3, 0.5, 1.0))  # Blue flash = failure
+			await get_tree().create_timer(0.5).timeout
+			if is_instance_valid(self):
+				_is_telegraphing = false
+			return
+
+	# HIGH FAITH: Miracles interrupt combat — brief invulnerability for player
+	if GameState.faith >= 70.0 and randf() < 0.12:
+		_telegraph_flash(Color(0.9, 0.8, 0.4))  # Golden flash = miracle
+		await get_tree().create_timer(0.4).timeout
+		if not is_instance_valid(self) or is_dead:
+			return
+		_is_telegraphing = false
+		# Miracle: heal player instead of dealing damage
+		if player_ref.has_method("heal"):
+			player_ref.heal(attack_damage * 0.3)
 		return
 
 	# Telegraph — color flash before hit
@@ -185,6 +213,11 @@ func _perform_attack() -> void:
 	# Faith-aligned enemies deal more when faith is low
 	if force_affinity == "faith" and GameState.faith < 20.0:
 		dmg *= 1.5
+
+	# HIGH VIOLENCE: All enemies hit harder and faster
+	if GameState.violence >= 70.0:
+		var violence_mult := 1.0 + (GameState.violence - 70.0) / 100.0  # 1.0-1.3
+		dmg *= violence_mult
 
 	player_ref.take_damage(dmg, global_position)
 

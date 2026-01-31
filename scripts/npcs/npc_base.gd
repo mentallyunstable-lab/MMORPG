@@ -35,6 +35,13 @@ func interact(_player: Node) -> void:
 	if DialogueManager.is_active:
 		return
 
+	# --- Witness Mode (Step 6): NPCs are gone. Only traces remain. ---
+	if GameState.witness_mode:
+		var witness_dialogue := _get_witness_dialogue()
+		if witness_dialogue.size() > 0:
+			DialogueManager.start_dialogue(witness_dialogue, "...")
+		return
+
 	# Check if faction is hostile — refuse dialogue
 	if _is_faction_hostile():
 		var refusal := _get_hostile_refusal()
@@ -45,6 +52,20 @@ func interact(_player: Node) -> void:
 	if dialogue.size() > 0:
 		DialogueManager.start_dialogue(dialogue, npc_name)
 		has_spoken = true
+
+
+## Witness mode: what the player sees instead of a living NPC.
+## Override in subclasses for specific NPCs. Default: generic corpse/absence.
+func _get_witness_dialogue() -> Array:
+	if has_spoken:
+		return [
+			{"speaker": "...", "text": "A body lies here. You recognize %s." % npc_name},
+			{"speaker": "...", "text": "Whatever they wanted — it doesn't matter now."},
+		]
+	return [
+		{"speaker": "...", "text": "Someone was here. You never spoke to them."},
+		{"speaker": "...", "text": "Their name is scratched into the wall, but you can't read it."},
+	]
 
 
 ## Check if this NPC's aligned faction is hostile to the player.
