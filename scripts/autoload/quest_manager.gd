@@ -158,6 +158,7 @@ func fail_quest(quest_id: String) -> void:
 # Quests with "inaction_reward_time" succeed if the player does NOTHING for that long.
 
 func _process(delta: float) -> void:
+	_check_timed_quest_hints(delta)
 	for qid in quests:
 		var q: Dictionary = quests[qid]
 		if q["state"] != QuestState.ACTIVE:
@@ -199,6 +200,70 @@ func get_time_remaining(quest_id: String) -> float:
 	if not q.has("time_limit"):
 		return -1.0
 	return maxf(q["time_limit"] - q.get("_elapsed", 0.0), 0.0)
+
+
+# --- Diegetic Signaling for Timed Quests (K-Fix) ---
+# Instead of showing a raw timer, emit world-narrative hints as time runs low.
+# NPCs react, environment shifts, atmosphere changes.
+
+signal quest_urgency_hint(quest_id: String, urgency: String, hint_text: String)
+
+var _hint_cooldown: float = 0.0
+const HINT_COOLDOWN := 8.0  # Minimum seconds between diegetic hints
+
+func _check_timed_quest_hints(delta: float) -> void:
+	_hint_cooldown -= delta
+	if _hint_cooldown > 0:
+		return
+
+	for qid in quests:
+		var q: Dictionary = quests[qid]
+		if q["state"] != QuestState.ACTIVE:
+			continue
+		if not q.has("time_limit"):
+			continue
+
+		var remaining := get_time_remaining(qid)
+		var total: float = q["time_limit"]
+		var ratio := remaining / total  # 1.0 = full time, 0.0 = expired
+
+		var giver: String = q.get("giver", "Someone")
+		var urgency := ""
+		var hint := ""
+
+		# Three urgency tiers with diegetic NPC/world hints
+		if ratio <= 0.15 and not q.get("_hint_critical", false):
+			urgency = "critical"
+			q["_hint_critical"] = true
+			var hints := [
+				"%s paces frantically. 'There's no time left!'" % giver,
+				"The air feels heavier. Something is about to slip away.",
+				"Shadows lengthen around you. The moment is almost gone.",
+			]
+			hint = hints[randi() % hints.size()]
+		elif ratio <= 0.4 and not q.get("_hint_urgent", false):
+			urgency = "urgent"
+			q["_hint_urgent"] = true
+			var hints := [
+				"%s glances at the sky. 'Hurry — we're running out of time.'" % giver,
+				"The wind picks up. Something in the world is shifting.",
+				"A distant bell tolls. The window is closing.",
+			]
+			hint = hints[randi() % hints.size()]
+		elif ratio <= 0.7 and not q.get("_hint_warning", false):
+			urgency = "warning"
+			q["_hint_warning"] = true
+			var hints := [
+				"%s shifts nervously. 'Don't take too long with this.'" % giver,
+				"The light changes subtly. Time is passing.",
+			]
+			hint = hints[randi() % hints.size()]
+
+		if hint != "":
+			_hint_cooldown = HINT_COOLDOWN
+			quest_urgency_hint.emit(qid, urgency, hint)
+			WorldEventManager.event_notification.emit(
+				"Quest: %s" % q.get("title", qid), hint)
 
 
 # --- Persistence ---

@@ -47,9 +47,9 @@ func _process(_delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player and player is PlayerController:
 		interact_prompt.visible = player.current_interactable != null
-		# Show stamina feedback — dim HUD when stamina is low
+		# Show stamina feedback — dim HUD when stamina is low (clamped for readability)
 		if player.stamina < 20.0:
-			modulate.a = lerpf(modulate.a, 0.6, _delta * 3.0)
+			modulate.a = maxf(lerpf(modulate.a, 0.6, _delta * 3.0), MIN_HUD_ALPHA)
 		else:
 			modulate.a = lerpf(modulate.a, 1.0, _delta * 3.0)
 	else:
@@ -128,32 +128,48 @@ func _pulse_screen_tint(force_name: String, delta_val: float) -> void:
 
 
 ## Subtle UI corruption after extreme states. Not explained.
+## Accessibility guard: critical info (health, interact prompt) stays readable.
+## Jitter is capped, alpha never drops below readable thresholds, glitch text is brief.
+
+# Accessibility minimums
+const MIN_HEALTH_ALPHA := 0.5  # Health bar never less visible than this
+const MIN_HUD_ALPHA := 0.45    # Overall HUD never dimmer than this
+const MAX_BAR_JITTER := 3.0    # Max pixel offset for force bar jitter
+const GLITCH_REVERT_FRAMES := 3  # Frames before glitched text reverts to readable
+var _glitch_frame_count := 0
+
 func _apply_degradation_effects() -> void:
 	var pressure := GameState.world_pressure
 
-	# Bar jitter at high pressure — bars twitch slightly
+	# Bar jitter at high pressure — bars twitch slightly (capped for readability)
 	if pressure >= 75.0:
 		var jitter := (pressure - 75.0) / 25.0  # 0-1 at 75-100
+		var max_offset := minf(jitter * 2.0, MAX_BAR_JITTER)
 		if faith_bar:
-			faith_bar.position.x = faith_bar.get_meta("_base_x", faith_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
 			if not faith_bar.has_meta("_base_x"):
 				faith_bar.set_meta("_base_x", faith_bar.position.x)
+			faith_bar.position.x = faith_bar.get_meta("_base_x") + randf_range(-max_offset, max_offset)
 		if truth_bar:
-			truth_bar.position.x = truth_bar.get_meta("_base_x", truth_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
 			if not truth_bar.has_meta("_base_x"):
 				truth_bar.set_meta("_base_x", truth_bar.position.x)
+			truth_bar.position.x = truth_bar.get_meta("_base_x") + randf_range(-max_offset, max_offset)
 		if violence_bar:
-			violence_bar.position.x = violence_bar.get_meta("_base_x", violence_bar.position.x) + randf_range(-jitter * 2.0, jitter * 2.0)
 			if not violence_bar.has_meta("_base_x"):
 				violence_bar.set_meta("_base_x", violence_bar.position.x)
+			violence_bar.position.x = violence_bar.get_meta("_base_x") + randf_range(-max_offset, max_offset)
 
-	# Health bar flickers when ending has triggered
+	# Health bar flickers when ending has triggered (accessibility: clamped alpha)
 	if GameState.save_closed and health_bar:
-		health_bar.modulate.a = 0.3 + randf() * 0.4  # Ghostly flicker
+		health_bar.modulate.a = maxf(MIN_HEALTH_ALPHA, 0.3 + randf() * 0.4)
 
-	# Interact prompt glitches at extreme states
+	# Interact prompt glitches at extreme states (accessibility: auto-reverts quickly)
 	if interact_prompt and interact_prompt.visible and pressure >= 85.0:
-		if randf() < 0.05:  # 5% chance per frame
+		if randf() < 0.05 and _glitch_frame_count <= 0:
 			interact_prompt.text = "[???]"
+			_glitch_frame_count = GLITCH_REVERT_FRAMES
+		elif _glitch_frame_count > 0:
+			_glitch_frame_count -= 1
+			if _glitch_frame_count <= 0:
+				interact_prompt.text = "[E] Interact"
 		else:
 			interact_prompt.text = "[E] Interact"
