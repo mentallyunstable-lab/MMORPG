@@ -28,6 +28,54 @@ var _god_attention: Dictionary = {}  # god_id -> float (0-100)
 var _attention_check_timer: float = 0.0
 const ATTENTION_CHECK_INTERVAL := 5.0
 
+# --- Phase Gating ---
+# Escalation scales with game phase: early/mid/late.
+# Phase is derived from world_pressure + max god attention + total force levels.
+enum GamePhase { EARLY, MID, LATE }
+var current_phase: GamePhase = GamePhase.EARLY
+
+# Phase thresholds: calculated from combined escalation score (0-100)
+const PHASE_MID_THRESHOLD := 30.0
+const PHASE_LATE_THRESHOLD := 60.0
+
+signal phase_changed(new_phase: int)
+
+
+func get_escalation_score() -> float:
+	var pressure_score := GameState.world_pressure  # 0-100
+	var max_attention := 0.0
+	for god_id in _god_attention:
+		max_attention = maxf(max_attention, _god_attention[god_id])
+	var force_sum := GameState.faith + GameState.truth + GameState.violence  # 0-300
+	# Weighted blend: pressure matters most, then attention, then raw forces
+	return clampf(pressure_score * 0.5 + max_attention * 0.3 + (force_sum / 300.0) * 100.0 * 0.2, 0.0, 100.0)
+
+
+func _update_phase() -> void:
+	var score := get_escalation_score()
+	var old_phase := current_phase
+	if score >= PHASE_LATE_THRESHOLD:
+		current_phase = GamePhase.LATE
+	elif score >= PHASE_MID_THRESHOLD:
+		current_phase = GamePhase.MID
+	else:
+		current_phase = GamePhase.EARLY
+	if old_phase != current_phase:
+		phase_changed.emit(current_phase)
+
+
+## Get a multiplier (0.0-1.0) that gates effect intensity by phase.
+## early_mult: effect strength in early game, mid_mult: mid game, late_mult: late game
+func get_phase_gate(early_mult: float = 0.0, mid_mult: float = 0.5, late_mult: float = 1.0) -> float:
+	match current_phase:
+		GamePhase.EARLY:
+			return early_mult
+		GamePhase.MID:
+			return mid_mult
+		GamePhase.LATE:
+			return late_mult
+	return 1.0
+
 
 func _ready() -> void:
 	_register_default_gods()
@@ -171,6 +219,9 @@ func _process(delta: float) -> void:
 		return
 	_attention_check_timer = 0.0
 
+	# Update game phase
+	_update_phase()
+
 	# Attention naturally decays slowly — gods lose interest
 	for god_id in _god_attention:
 		if get_god_state(god_id) == "dead":
@@ -185,8 +236,9 @@ func _process(delta: float) -> void:
 	# Check for attention-based events
 	_check_attention_events()
 
-	# Check for retaliation
-	_check_retaliation()
+	# Check for retaliation (mid+ phase only)
+	if current_phase != GamePhase.EARLY:
+		_check_retaliation()
 
 
 ## Add attention from a specific god. Called externally by GodEncounter, shrines, etc.
@@ -222,6 +274,7 @@ func get_god_attention(god_id: String) -> float:
 
 
 ## Check for attention-driven events — hallucinations, hostile env, forced encounters.
+## Phase-gated: early phase suppresses most effects, mid allows watching, late unlocks obsessed.
 func _check_attention_events() -> void:
 	for god_id in _god_attention:
 		var attention: float = _god_attention[god_id]
@@ -230,9 +283,10 @@ func _check_attention_events() -> void:
 
 		var god_name := get_god_name(god_id)
 
-		# Noticed: occasional whisper hallucinations
+		# Noticed: occasional whisper hallucinations (all phases, reduced in early)
 		if attention >= ATTENTION_NOTICED and attention < ATTENTION_WATCHING:
-			if randf() < 0.15:  # 15% chance per check
+			var chance := 0.15 * get_phase_gate(0.3, 0.7, 1.0)
+			if randf() < chance:
 				var whispers := [
 					"You hear something. A voice — maybe your own.",
 					"The ash shifts. Something is paying attention.",
@@ -241,9 +295,12 @@ func _check_attention_events() -> void:
 				WorldEventManager.event_notification.emit(
 					"???", whispers[randi() % whispers.size()])
 
-		# Watching: environmental hostility + stronger hallucinations
+		# Watching: environmental hostility + stronger hallucinations (mid+ only)
 		elif attention >= ATTENTION_WATCHING and attention < ATTENTION_OBSESSED:
-			if randf() < 0.2:
+			var gate := get_phase_gate(0.0, 0.6, 1.0)
+			if gate <= 0.0:
+				continue
+			if randf() < 0.2 * gate:
 				var messages := [
 					"%s watches. You can feel it like heat on skin." % god_name,
 					"The air bends around you. %s is aware." % god_name,
@@ -252,26 +309,93 @@ func _check_attention_events() -> void:
 				WorldEventManager.event_notification.emit(
 					god_name, messages[randi() % messages.size()])
 			# Environmental hostility — force shifts
-			if randf() < 0.1:
+			if randf() < 0.1 * gate:
 				GameState.add_force("faith", randf_range(-2.0, 2.0))
 
-		# Obsessed: forced encounters + reality warping
+		# Obsessed: forced encounters + reality warping (late phase only)
 		elif attention >= ATTENTION_OBSESSED:
-			if randf() < 0.25:
-				var messages := [
-					"%s SEES YOU. There is nowhere to hide." % god_name.to_upper(),
-					"Reality folds. %s is reaching through." % god_name,
-					"Your hands are not your own for a moment. %s is here." % god_name,
-				]
-				WorldEventManager.event_notification.emit(
-					"DIVINE PRESENCE", messages[randi() % messages.size()])
+			var gate := get_phase_gate(0.0, 0.2, 1.0)
+			if gate <= 0.0:
+				continue
+			if randf() < 0.25 * gate:
+				_emit_god_obsession_event(god_id, god_name)
 			# Force inversion — gods warp the rules
-			if randf() < 0.08:
+			if randf() < 0.08 * gate:
 				var forces := ["faith", "truth", "violence"]
 				var target: String = forces[randi() % forces.size()]
 				GameState.add_force(target, randf_range(-3.0, 3.0))
 				WorldEventManager.event_notification.emit(
 					god_name, "The forces shift without reason. %s interferes." % god_name)
+
+
+# --- God Obsession Asymmetry ---
+# Each god invades differently when obsessed. Not a generic "divine presence" — each has personality.
+
+func _emit_god_obsession_event(god_id: String, god_name: String) -> void:
+	match god_id:
+		"verath":
+			# Verath (death/rebirth): Decay invasion — health flickers, world rots
+			var effect := randi() % 3
+			match effect:
+				0:
+					WorldEventManager.event_notification.emit(
+						god_name, "Your skin itches. Something underneath is changing. Verath recycles.")
+					# Health fluctuation — brief damage + heal
+					GameState.player_health = maxf(GameState.player_health - 8.0, 1.0)
+					god_event.emit(god_id, "health_pulse", {"damage": 8.0, "heal_delay": 2.0})
+				1:
+					WorldEventManager.event_notification.emit(
+						"ASH MOTHER", "The ground softens. Roots push through stone. Verath is composting the world.")
+					# Corruption spike in current zone
+					for zone_id in GameState.region_state:
+						var region: Dictionary = GameState.get_region(zone_id)
+						region["corruption"] = minf(region.get("corruption", 0.0) + 5.0, 100.0)
+				2:
+					WorldEventManager.event_notification.emit(
+						god_name, "You smell soil after rain. Your wounds ache, then ease. The cycle does not ask permission.")
+					GameState.player_health = minf(GameState.player_health + 5.0, GameState.player_max_health)
+		"kael":
+			# Kael (light/judgment): Exposure invasion — forces revealed, truth forced
+			var effect := randi() % 3
+			match effect:
+				0:
+					WorldEventManager.event_notification.emit(
+						"THE BLIND SUN", "Light pours from nowhere. Your sins are legible. Kael reads you.")
+					# Truth spike — judgment exposes
+					GameState.add_force("truth", 3.0)
+				1:
+					WorldEventManager.event_notification.emit(
+						god_name, "Your eyes burn. For a moment you see every lie you've told rendered in gold.")
+					god_event.emit(god_id, "ui_distortion", {"intensity": 0.7, "duration": 2.5})
+				2:
+					WorldEventManager.event_notification.emit(
+						"JUDGMENT", "Kael's gaze strips away pretense. Faith wavers under scrutiny.")
+					GameState.add_force("faith", -2.0)
+					GameState.add_force("truth", 2.0)
+		"null_throne":
+			# Null Throne (void/absence): Erasure invasion — things disappear, silence deepens
+			var effect := randi() % 3
+			match effect:
+				0:
+					WorldEventManager.event_notification.emit(
+						"...", "A word vanishes from your vocabulary. You can't remember which one.")
+					ForceEffects.trigger_silence(3.0, 0.9)
+				1:
+					WorldEventManager.event_notification.emit(
+						"THE ABSENCE", "Your shadow is gone. It will return, but not all of it.")
+					god_event.emit(god_id, "ui_erasure", {"duration": 4.0})
+				2:
+					WorldEventManager.event_notification.emit(
+						"", "Something was here. You're sure of it. The Null Throne answers prayers by subtraction.")
+					# All forces drain slightly — the void takes
+					GameState.add_force("faith", -1.5)
+					GameState.add_force("truth", -1.5)
+					GameState.add_force("violence", -1.5)
+		_:
+			# Fallback for any future gods
+			WorldEventManager.event_notification.emit(
+				"DIVINE PRESENCE", "%s SEES YOU. There is nowhere to hide." % god_name.to_upper())
+	WorldMemory.record("god_obsession_%s_%d" % [god_id, randi() % 1000])
 
 
 # --- God Retaliation Events ---

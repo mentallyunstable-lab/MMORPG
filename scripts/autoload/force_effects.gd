@@ -189,12 +189,17 @@ func _update_atmosphere(delta: float) -> void:
 			_silence_timer = 0.0
 			silence_level = 0.0
 
-	# Passive silence from extreme states
+	# Phase gate: passive silence/decay scale with game phase
+	var phase_gate := 1.0
+	if GodManager:
+		phase_gate = GodManager.get_phase_gate(0.2, 0.6, 1.0)
+
+	# Passive silence from extreme states (phase-gated)
 	var passive_silence := 0.0
 	if GameState.world_pressure >= 90.0:
-		passive_silence = 0.3
+		passive_silence = 0.3 * phase_gate
 	if GameState.save_closed:
-		passive_silence = 0.6  # Post-ending: the world is quieter
+		passive_silence = 0.6  # Post-ending: always quiet (not gated)
 	silence_level = maxf(silence_level, passive_silence)
 
 	# Visual decay scales with ashfall/corruption
@@ -203,11 +208,11 @@ func _update_atmosphere(delta: float) -> void:
 		var region: Dictionary = GameState.get_region(zone_id)
 		max_corruption = maxf(max_corruption, region.get("corruption", 0.0))
 
-	# Decay from corruption + pressure
-	var target_decay := clampf(max_corruption / 100.0, 0.0, 1.0) * 0.6
-	target_decay += clampf((GameState.world_pressure - 50.0) / 50.0, 0.0, 1.0) * 0.4
+	# Decay from corruption + pressure (phase-gated)
+	var target_decay := clampf(max_corruption / 100.0, 0.0, 1.0) * 0.6 * phase_gate
+	target_decay += clampf((GameState.world_pressure - 50.0) / 50.0, 0.0, 1.0) * 0.4 * phase_gate
 	if GameState.save_closed:
-		target_decay = 1.0  # Post-ending: full decay
+		target_decay = 1.0  # Post-ending: full decay (not gated)
 
 	decay_level = lerpf(decay_level, target_decay, delta * 0.5)
 

@@ -67,6 +67,8 @@ func _recalculate_pressure() -> void:
 # --- Force API ---
 
 func add_force(force_name: String, amount: float) -> void:
+	if witness_mode:
+		return  # Dead world cannot change
 	var effective := _apply_diminishing_returns(force_name, amount)
 	match force_name:
 		"faith":
@@ -157,16 +159,21 @@ func set_region_value(zone_id: String, key: String, value: Variant) -> void:
 
 # --- Ending Lock-in ---
 # Once an ending triggers, the save is "closed". No reloading to before the ending.
+# Witness mode: player can still walk the dead world, but cannot change it.
 var save_closed: bool = false
 var ending_type: String = ""
 var ending_message: String = ""
+var witness_mode: bool = false  # True when exploring post-ending world
 
 const SAVE_PATH := "user://ashborn_save.dat"
 const CLOSED_MESSAGE := "This world has concluded."
 
 
 ## Save the game to disk. If ending has triggered, marks save as closed.
+## In witness mode, don't overwrite — the world is frozen.
 func save_game() -> void:
+	if witness_mode:
+		return
 	var data := save_state()
 	data["save_closed"] = save_closed
 	data["ending_type"] = ending_type
@@ -198,13 +205,23 @@ func load_game() -> bool:
 
 	var data: Dictionary = json.data
 
-	# ENDING LOCK-IN: if save is closed, show message and refuse
+	# ENDING LOCK-IN: if save is closed, enter witness mode instead of refusing
 	if data.get("save_closed", false):
 		save_closed = true
+		witness_mode = true
 		ending_type = data.get("ending_type", "")
 		ending_message = data.get("ending_message", CLOSED_MESSAGE)
-		WorldEventManager.event_notification.emit("THE END", ending_message)
-		return false
+		# Load the world state so the player can walk through it
+		load_state(data)
+		if data.has("world_memory"):
+			WorldMemory.load_state(data["world_memory"])
+		if data.has("god_attention"):
+			GodManager.load_attention(data["god_attention"])
+		# Don't load quests — they're done
+		WorldEventManager.event_notification.emit(
+			"WITNESS", "This world has ended. You may walk its remains.")
+		WorldMemory.record("witness_mode_entered")
+		return true
 
 	load_state(data)
 	if data.has("world_memory"):
