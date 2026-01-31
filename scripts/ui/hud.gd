@@ -1,4 +1,5 @@
-## HUD — Displays player health, Three Forces, floating text, and force bar effects.
+## HUD — Diegetic force feedback. No numbers, no popups. Only consequences.
+## Violence = screen grain. Faith = golden warmth. Truth = UI misalignment.
 extends Control
 
 @onready var health_bar: ProgressBar = $MarginContainer/VBoxContainer/HealthBar
@@ -7,22 +8,29 @@ extends Control
 @onready var violence_bar: ProgressBar = $MarginContainer/VBoxContainer/ForceBars/ViolenceBar
 @onready var interact_prompt: Label = $InteractPrompt
 
-# Force colors
+# Force colors (used internally for bar tinting, not for popups)
 const FORCE_COLORS := {
 	"faith": Color(0.6, 0.7, 1.0),
 	"truth": Color(1.0, 1.0, 0.6),
 	"violence": Color(1.0, 0.4, 0.3),
 }
 
-# Screen tint for force feedback
-var _tint_overlay: ColorRect = null
+# --- Diegetic overlay layers ---
+var _tint_overlay: ColorRect = null       # Force pulse tint
+var _grain_overlay: ColorRect = null       # Violence screen grain
+var _grain_noise_timer: float = 0.0
+
+# Diegetic indicator state
+var _violence_grain_intensity: float = 0.0  # 0=clean, 1=heavy grain
+var _truth_flicker_timer: float = 0.0       # Countdown for UI misalignment
+var _faith_warmth: float = 0.0              # 0=neutral, 1=golden glow
 
 
 func _ready() -> void:
 	GameState.force_changed.connect(_on_force_changed)
 	interact_prompt.visible = false
 
-	# Create tint overlay for force pulses
+	# Create tint overlay for force pulses (subtle color wash)
 	_tint_overlay = ColorRect.new()
 	_tint_overlay.color = Color(0, 0, 0, 0)
 	_tint_overlay.anchors_preset = Control.PRESET_FULL_RECT
@@ -30,7 +38,14 @@ func _ready() -> void:
 	add_child(_tint_overlay)
 	move_child(_tint_overlay, 0)
 
-	# Initialize
+	# Grain overlay for violence — rendered as semi-transparent noise pattern
+	_grain_overlay = ColorRect.new()
+	_grain_overlay.color = Color(0, 0, 0, 0)
+	_grain_overlay.anchors_preset = Control.PRESET_FULL_RECT
+	_grain_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_grain_overlay)
+	move_child(_grain_overlay, 0)
+
 	_update_forces()
 	_update_health()
 
@@ -60,6 +75,11 @@ func _process(_delta: float) -> void:
 	_update_bar_effects(truth_bar, GameState.truth, FORCE_COLORS["truth"])
 	_update_bar_effects(violence_bar, GameState.violence, FORCE_COLORS["violence"])
 
+	# --- Diegetic indicators (every frame) ---
+	_update_violence_grain(_delta)
+	_update_truth_flicker(_delta)
+	_update_faith_warmth(_delta)
+
 	# Subtle save degradation — UI corruption at extreme states
 	_apply_degradation_effects()
 
@@ -67,11 +87,25 @@ func _process(_delta: float) -> void:
 func _on_force_changed(force_name: String, old_value: float, new_value: float) -> void:
 	_update_forces()
 
-	# Floating text feedback
+	# NO floating text. Only diegetic consequences.
 	var delta_val := new_value - old_value
-	if absf(delta_val) >= 0.05:
-		_spawn_floating_text(force_name, delta_val)
-		_pulse_screen_tint(force_name, delta_val)
+	if absf(delta_val) < 0.05:
+		return
+
+	# Diegetic pulse: a brief color wash that fades. No numbers.
+	_pulse_screen_tint(force_name, delta_val)
+
+	# Violence spike → screen grain burst
+	if force_name == "violence" and delta_val > 0:
+		_violence_grain_intensity = clampf(_violence_grain_intensity + delta_val * 0.02, 0.0, 0.6)
+
+	# Truth spike → UI misalignment (bars offset briefly)
+	if force_name == "truth" and delta_val > 0:
+		_truth_flicker_timer = clampf(delta_val * 0.1, 0.2, 1.5)
+
+	# Faith spike → warmth pulse
+	if force_name == "faith" and delta_val > 0:
+		_faith_warmth = clampf(_faith_warmth + delta_val * 0.03, 0.0, 0.5)
 
 
 func _update_forces() -> void:
@@ -87,44 +121,85 @@ func _update_health() -> void:
 func _update_bar_effects(bar: ProgressBar, value: float, color: Color) -> void:
 	if not bar:
 		return
-	var stylebox := bar.get("theme_override_styles/fill") as StyleBox
 	if value >= 90.0:
-		# Flash at critical
 		var flash := absf(sin(Time.get_ticks_msec() * 0.008))
 		bar.modulate = color.lerp(Color.WHITE, flash * 0.6)
 	elif value >= 70.0:
-		# Glow at high
 		bar.modulate = color.lerp(Color.WHITE, 0.3)
 	else:
 		bar.modulate = Color.WHITE
 
 
-## Spawn floating text like "+5 Faith" or "-2 Truth" near the force bars.
-func _spawn_floating_text(force_name: String, delta_val: float) -> void:
-	var label := Label.new()
-	var sign_str := "+" if delta_val > 0 else ""
-	label.text = "%s%.1f %s" % [sign_str, delta_val, force_name.capitalize()]
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", FORCE_COLORS.get(force_name, Color.WHITE))
-	label.position = Vector2(330, 60)
-	label.z_index = 10
-	add_child(label)
+# --- Diegetic: Violence → Screen Grain ---
+# Persistent grain that thickens with violence, fades slowly when violence drops.
 
-	var tween := create_tween()
-	tween.tween_property(label, "position:y", label.position.y - 40, 1.2)
-	tween.parallel().tween_property(label, "modulate:a", 0.0, 1.2)
-	tween.tween_callback(label.queue_free)
+func _update_violence_grain(delta: float) -> void:
+	# Target grain based on current violence level
+	var target := clampf(GameState.violence / 100.0, 0.0, 1.0) * 0.3
+	_violence_grain_intensity = lerpf(_violence_grain_intensity, target, delta * 0.8)
+
+	if _grain_overlay and _violence_grain_intensity > 0.01:
+		# Simulate grain: rapidly flickering dark spots (approximated with alpha noise)
+		_grain_noise_timer += delta
+		if _grain_noise_timer > 0.05:  # 20fps grain update
+			_grain_noise_timer = 0.0
+			var r := randf_range(0.0, 0.15) * _violence_grain_intensity
+			_grain_overlay.color = Color(r, 0, 0, _violence_grain_intensity * 0.4)
+	elif _grain_overlay:
+		_grain_overlay.color = Color(0, 0, 0, 0)
 
 
-## Brief screen tint pulse in force color when force changes.
+# --- Diegetic: Truth → UI Misalignment ---
+# When truth spikes, UI elements shift slightly — reality becomes too precise.
+
+func _update_truth_flicker(delta: float) -> void:
+	if _truth_flicker_timer > 0:
+		_truth_flicker_timer -= delta
+		# Offset force bars slightly during flicker
+		var offset := randf_range(-1.5, 1.5) * (_truth_flicker_timer / 1.5)
+		if faith_bar:
+			faith_bar.position.y = offset
+		if truth_bar:
+			truth_bar.position.y = -offset
+		if violence_bar:
+			violence_bar.position.y = offset * 0.5
+	else:
+		# Persistent truth-based micro-misalignment at high values
+		var truth_t := GameState.truth / 100.0
+		if truth_t > 0.5 and faith_bar and truth_bar and violence_bar:
+			var micro := sin(Time.get_ticks_msec() * 0.003) * truth_t * 0.8
+			faith_bar.position.y = micro
+			truth_bar.position.y = -micro * 0.5
+			violence_bar.position.y = micro * 0.3
+		elif faith_bar:
+			faith_bar.position.y = 0
+			if truth_bar: truth_bar.position.y = 0
+			if violence_bar: violence_bar.position.y = 0
+
+
+# --- Diegetic: Faith → Golden Warmth ---
+# High faith tints the screen warm. Not informational — atmospheric.
+
+func _update_faith_warmth(delta: float) -> void:
+	var target := clampf(GameState.faith / 100.0, 0.0, 1.0) * 0.15
+	_faith_warmth = lerpf(_faith_warmth, target, delta * 0.5)
+
+	if _tint_overlay and _faith_warmth > 0.01:
+		# Blend the tint overlay toward golden warmth (doesn't override pulse)
+		var current_a := _tint_overlay.color.a
+		if current_a < 0.01:  # Only apply warmth when no pulse is active
+			_tint_overlay.color = Color(0.9, 0.75, 0.4, _faith_warmth)
+
+
+## Brief screen tint pulse in force color when force changes. No numbers. Just color.
 func _pulse_screen_tint(force_name: String, delta_val: float) -> void:
 	if not _tint_overlay:
 		return
 	var color: Color = FORCE_COLORS.get(force_name, Color.WHITE)
-	var intensity := clampf(absf(delta_val) / 20.0, 0.02, 0.15)
+	var intensity := clampf(absf(delta_val) / 20.0, 0.02, 0.12)
 	_tint_overlay.color = Color(color.r, color.g, color.b, intensity)
 	var tween := create_tween()
-	tween.tween_property(_tint_overlay, "color:a", 0.0, 0.6)
+	tween.tween_property(_tint_overlay, "color:a", 0.0, 0.8)
 
 
 ## Subtle UI corruption after extreme states. Not explained.

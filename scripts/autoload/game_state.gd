@@ -168,12 +168,48 @@ var witness_mode: bool = false  # True when exploring post-ending world
 const SAVE_PATH := "user://ashborn_save.dat"
 const CLOSED_MESSAGE := "This world has concluded."
 
+# --- Save Restrictions (Step 7) ---
+# Manual save only. No saving during god attention spikes. Witness mode = no saving.
+# Save zones are designated safe areas (interactables with "save_point" group).
+var save_allowed: bool = true  # Set false during attention spikes, combat, etc.
+
+signal save_blocked(reason: String)
+
+
+## Check if saving is currently permitted.
+func can_save() -> bool:
+	# Never in witness mode
+	if witness_mode:
+		return false
+	# Never when save is already closed
+	if save_closed:
+		return false
+	# Block during god attention spikes (any god at watching+ level)
+	for god_id in GodManager.god_defs:
+		var attention := GodManager.get_god_attention(god_id)
+		if attention >= GodManager.ATTENTION_WATCHING:
+			return false
+	# Block during active dialogue
+	if DialogueManager.is_active:
+		return false
+	return save_allowed
+
 
 ## Save the game to disk. If ending has triggered, marks save as closed.
 ## In witness mode, don't overwrite — the world is frozen.
-func save_game() -> void:
+## Returns true if save succeeded, false if blocked.
+func save_game() -> bool:
 	if witness_mode:
-		return
+		save_blocked.emit("The world is dead. There is nothing left to save.")
+		return false
+	if not can_save():
+		# Determine reason
+		for god_id in GodManager.god_defs:
+			if GodManager.get_god_attention(god_id) >= GodManager.ATTENTION_WATCHING:
+				save_blocked.emit("Something is watching. You cannot save here.")
+				return false
+		save_blocked.emit("You cannot save right now.")
+		return false
 	var data := save_state()
 	data["save_closed"] = save_closed
 	data["ending_type"] = ending_type
@@ -186,6 +222,8 @@ func save_game() -> void:
 	if file:
 		file.store_string(JSON.stringify(data))
 		file.close()
+		return true
+	return false
 
 
 ## Load the game from disk. Refuses to load if save is closed.

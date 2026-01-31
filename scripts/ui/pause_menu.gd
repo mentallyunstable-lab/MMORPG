@@ -6,11 +6,13 @@ extends Control
 @onready var god_summary: VBoxContainer = $Panel/MarginContainer/Tabs/Gods/GodList
 
 var _paused: bool = false
+var _save_status_label: Label = null
 
 
 func _ready() -> void:
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	GameState.save_blocked.connect(_on_save_blocked)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -192,3 +194,32 @@ func _god_state_hint(state: String) -> String:
 func _clear(container: VBoxContainer) -> void:
 	for child in container.get_children():
 		child.queue_free()
+
+
+# --- Save System (Step 7) ---
+
+func try_save() -> void:
+	var result := GameState.save_game()
+	if result and _save_status_label:
+		_save_status_label.text = "Saved."
+		_save_status_label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+		_fade_label(_save_status_label)
+
+
+func _on_save_blocked(reason: String) -> void:
+	if not _save_status_label:
+		_save_status_label = Label.new()
+		_save_status_label.add_theme_font_size_override("font_size", 13)
+		add_child(_save_status_label)
+		_save_status_label.anchors_preset = Control.PRESET_BOTTOM_LEFT
+		_save_status_label.position = Vector2(20, -40)
+	_save_status_label.text = reason
+	_save_status_label.modulate.a = 1.0
+	_save_status_label.add_theme_color_override("font_color", Color(0.8, 0.4, 0.3))
+	_fade_label(_save_status_label)
+
+
+func _fade_label(label: Label) -> void:
+	var tween := create_tween()
+	tween.tween_interval(2.0)
+	tween.tween_property(label, "modulate:a", 0.0, 1.5)
