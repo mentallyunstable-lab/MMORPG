@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3 uid="uid://testzone001"]
+[gd_scene load_steps=28 format=3 uid="uid://testzone001"]
 
 [ext_resource type="PackedScene" uid="uid://player001" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://enemy001" path="res://scenes/enemies/enemy_basic.tscn" id="2"]
@@ -44,7 +44,6 @@ ambient_light_energy = 0.4
 fog_enabled = true
 fog_light_color = Color(0.15, 0.1, 0.08, 1)
 fog_density = 0.01
-volumetric_fog_enabled = false
 
 [sub_resource type="BoxMesh" id="BoxMesh_ruin_wall"]
 size = Vector3(4.0, 3.0, 0.5)
