@@ -22,6 +22,14 @@ WorldManager="*res://scripts/autoload/world_manager.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
 WorldMemory="*res://scripts/autoload/world_memory.gd"
 DebugTimer="*res://scripts/autoload/debug_timer.gd"
+ForceEconomyHardening="*res://scripts/autoload/force_economy_hardening.gd"
+SaveIntegrity="*res://scripts/autoload/save_integrity.gd"
+NPCRegistry="*res://scripts/autoload/npc_registry.gd"
+CrossZonePersistence="*res://scripts/autoload/cross_zone_persistence.gd"
+GodPersonality="*res://scripts/autoload/god_personality.gd"
+DiegeticQuestSystem="*res://scripts/autoload/diegetic_quest_system.gd"
+AudioAtmosphere="*res://scripts/autoload/audio_atmosphere.gd"
+ReleaseReadiness="*res://scripts/autoload/release_readiness.gd"
 
 [display]
 
