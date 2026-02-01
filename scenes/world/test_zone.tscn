@@ -15,6 +15,9 @@
 [ext_resource type="PackedScene" uid="uid://deathscreen001" path="res://scenes/ui/death_screen.tscn" id="13"]
 [ext_resource type="PackedScene" uid="uid://pausemenu001" path="res://scenes/ui/pause_menu.tscn" id="14"]
 [ext_resource type="PackedScene" uid="uid://questlog001" path="res://scenes/ui/quest_log_ui.tscn" id="15"]
+[ext_resource type="Script" path="res://scripts/npcs/npc_local_survivor.gd" id="16"]
+[ext_resource type="Script" path="res://scripts/systems/env_storytelling.gd" id="17"]
+[ext_resource type="Script" path="res://scripts/enemies/enemy_blood_echo.gd" id="18"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(80, 80)
@@ -239,6 +242,120 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
 transform = Transform3D(0.866, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866, -6, 1.0, 22)
 mesh = SubResource("BoxMesh_ruin_wall")
 surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="NPC_Maren" type="CharacterBody3D" parent="." groups=["interactables", "npcs"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -5)
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("16")
+
+[node name="MarenCollision" type="CollisionShape3D" parent="NPC_Maren"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="MarenMesh" type="MeshInstance3D" parent="NPC_Maren"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("CapsuleMesh_npc")
+
+[node name="BloodEcho" type="CharacterBody3D" parent="." groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("18")
+
+[node name="BloodEchoCollision" type="CollisionShape3D" parent="BloodEcho"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="BloodEchoMesh" type="MeshInstance3D" parent="BloodEcho"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("CapsuleMesh_npc")
+
+[node name="EnvStory_BurnedShrine" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0, -5)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 0
+scene_id = "burned_shrine"
+
+[node name="BurnedShrineMesh" type="MeshInstance3D" parent="EnvStory_BurnedShrine"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="BurnedShrineCol" type="CollisionShape3D" parent="EnvStory_BurnedShrine"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="EnvStory_BrokenMachine" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, 12)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 0
+scene_id = "broken_machine"
+
+[node name="BrokenMachineMesh" type="MeshInstance3D" parent="EnvStory_BrokenMachine"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="BrokenMachineCol" type="CollisionShape3D" parent="EnvStory_BrokenMachine"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="EnvStory_MassGrave" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, -0.3, 20)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 0
+scene_id = "mass_grave"
+
+[node name="MassGraveCol" type="CollisionShape3D" parent="EnvStory_MassGrave"]
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="EnvStory_LyingMemorial" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -22)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 1
+scene_id = "lying_memorial"
+
+[node name="MemorialMesh" type="MeshInstance3D" parent="EnvStory_LyingMemorial"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="MemorialCol" type="CollisionShape3D" parent="EnvStory_LyingMemorial"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("CapsuleShape3D_npc")
+
+[node name="EnvStory_DistantSpire" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -35, 0, -35)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 2
+scene_id = "distant_spire"
+
+[node name="SpireMesh" type="MeshInstance3D" parent="EnvStory_DistantSpire"]
+transform = Transform3D(0.3, 0, 0, 0, 8, 0, 0, 0, 0.3, 0, 4, 0)
+mesh = SubResource("BoxMesh_ruin_pillar")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="EnvStory_WitnessDoor" type="StaticBody3D" parent="." groups=["interactables"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -18)
+collision_layer = 8
+script = ExtResource("17")
+scene_type = 0
+scene_id = "witness_door"
+
+[node name="WitnessDoorMesh" type="MeshInstance3D" parent="EnvStory_WitnessDoor"]
+transform = Transform3D(0.5, 0, 0, 0, 1.5, 0, 0, 0, 0.1, 0, 0.75, 0)
+mesh = SubResource("BoxMesh_ruin_wall")
+surface_material_override/0 = SubResource("StandardMaterial3D_ruin")
+
+[node name="WitnessDoorCol" type="CollisionShape3D" parent="EnvStory_WitnessDoor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("CapsuleShape3D_npc")
 
 [node name="UILayer" type="CanvasLayer" parent="."]
 

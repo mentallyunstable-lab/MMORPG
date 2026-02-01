@@ -193,15 +193,79 @@ func _apply_event_effects(_event_id: String, data: Dictionary) -> void:
 
 
 ## Check if an ending condition has been reached. Fires once.
+## The ending is action-triggered: the world changes immediately, no cutscene.
+## Player transitions to witness mode in-place.
 func _check_ending(ending_type: String, description: String) -> void:
 	if _ending_triggered:
 		return
 	_ending_triggered = true
 	ending_reached.emit(ending_type, description)
-	event_notification.emit("THE END", description)
+
+	# No "THE END" screen — just a quiet notification
+	event_notification.emit("", "Something fundamental has changed. You feel it in your bones.")
+
+	# Apply permanent world changes based on ending type
+	_apply_ending_world_changes(ending_type)
 
 	# Lock the save permanently — no rewind, no retry
 	GameState.lock_ending(ending_type, description)
+
+	# Immediate witness transition — no loading screen, no fade, just... different
+	_enter_witness_mode()
+
+
+## Apply permanent world changes when ending triggers — no cutscene, only mechanics.
+func _apply_ending_world_changes(ending_type: String) -> void:
+	match ending_type:
+		"god_death":
+			# Sky darkens, fog thickens, all enemies despawn over time
+			GameState.add_force("violence", 10.0)
+			GameState.add_force("faith", -10.0)
+			# Record world state changes
+			WorldMemory.record("ending_world_changed_god_death")
+			for zone_id in GameState.region_state:
+				var region: Dictionary = GameState.get_region(zone_id)
+				region["corruption"] = 100.0  # Max corruption
+		"god_ascension":
+			# Sky brightens painfully, faith overwhelms
+			GameState.add_force("faith", 15.0)
+			WorldMemory.record("ending_world_changed_god_ascension")
+		"ashfall":
+			# Everything decays — maximum entropy
+			WorldMemory.record("ending_world_changed_ashfall")
+			for zone_id in GameState.region_state:
+				var region: Dictionary = GameState.get_region(zone_id)
+				region["corruption"] = minf(region.get("corruption", 0.0) + 50.0, 100.0)
+		_:
+			WorldMemory.record("ending_world_changed_generic")
+
+
+## Enter witness mode immediately — no fade, no loading screen.
+## The player is already in the world. The world just changes around them.
+func _enter_witness_mode() -> void:
+	GameState.witness_mode = true
+
+	# Signal witness mode — systems adapt
+	witness_mode_entered.emit()
+
+	# Remove music (signal for audio systems)
+	event_notification.emit("", "The music stops.")
+	WorldMemory.record("witness_mode_music_removed")
+
+	# Brief silence effect
+	ForceEffects.trigger_silence(5.0, 1.0)
+
+	# After a moment, acknowledge the state
+	_notify_witness_delayed()
+
+
+func _notify_witness_delayed() -> void:
+	await get_tree().create_timer(3.0).timeout
+	event_notification.emit("WITNESS", "You are still here. Walk the remains. There is nothing else.")
+
+
+## Signal for witness mode — other systems listen to adapt.
+signal witness_mode_entered
 
 
 # --- Persistence ---

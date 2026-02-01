@@ -69,6 +69,10 @@ func _recalculate_pressure() -> void:
 func add_force(force_name: String, amount: float) -> void:
 	if witness_mode:
 		return  # Dead world cannot change
+	# Anti-farming: reduce gains if force events are too frequent
+	if amount > 0:
+		var farm_mult := track_force_gain()
+		amount *= farm_mult
 	var effective := _apply_diminishing_returns(force_name, amount)
 	match force_name:
 		"faith":
@@ -202,6 +206,8 @@ func save_game() -> bool:
 	if witness_mode:
 		save_blocked.emit("The world is dead. There is nothing left to save.")
 		return false
+	if not check_save_abuse():
+		return false
 	if not can_save():
 		# Determine reason
 		for god_id in GodManager.god_defs:
@@ -268,6 +274,9 @@ func load_game() -> bool:
 		GodManager.load_attention(data["god_attention"])
 	if data.has("quests"):
 		QuestManager.load_state(data["quests"])
+
+	# Track reload for scumming detection
+	on_load_detected()
 	return true
 
 
@@ -305,3 +314,74 @@ func load_state(data: Dictionary) -> void:
 	player_health = data.get("player_health", 100.0)
 	player_max_health = data.get("player_max_health", 100.0)
 	player_alive = data.get("player_alive", true)
+
+
+# --- Save Abuse Hardening (Phase 4) ---
+# Anti-scumming: track reload patterns, prevent force farming, limit dialogue repeats.
+
+var _save_count: int = 0
+var _load_count: int = 0
+var _last_save_time: float = 0.0
+var _force_gain_history: Array[float] = []  # Rolling window of force gain timestamps
+var _dialogue_repeat_tracker: Dictionary = {}  # npc_id -> interaction count
+
+const SAVE_COOLDOWN := 30.0  # Minimum seconds between saves
+const FORCE_FARM_WINDOW := 60.0  # Rolling window for force farming detection
+const FORCE_FARM_THRESHOLD := 8  # Max force events in window before penalty
+const DIALOGUE_REPEAT_LIMIT := 3  # Max times same dialogue grants force before diminishing
+
+signal save_abuse_detected(abuse_type: String)
+
+## Called on every save attempt — enforces cooldown and tracks patterns.
+func check_save_abuse() -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _last_save_time < SAVE_COOLDOWN:
+		save_blocked.emit("The world needs time to settle before you can save again.")
+		return false
+	_save_count += 1
+	_last_save_time = now
+	return true
+
+## Called on every load — tracks reload scumming.
+func on_load_detected() -> void:
+	_load_count += 1
+	# After too many reloads, the world notices
+	if _load_count >= 3:
+		WorldMemory.record("save_scumming_detected")
+		WorldMemory.record_ambient("The world stuttered — it noticed the repetition")
+	if _load_count >= 5:
+		# Penalty: world pressure increases permanently
+		add_force("violence", 2.0)
+		WorldEventManager.event_notification.emit(
+			"???", "The world resists being unwound. Something was lost in the reloading.")
+		save_abuse_detected.emit("reload_scumming")
+
+## Track force farming — repeated force gains in quick succession.
+func track_force_gain() -> float:
+	var now := Time.get_ticks_msec() / 1000.0
+	_force_gain_history.append(now)
+
+	# Prune old entries outside the window
+	while _force_gain_history.size() > 0 and now - _force_gain_history[0] > FORCE_FARM_WINDOW:
+		_force_gain_history.pop_front()
+
+	# Check for farming
+	if _force_gain_history.size() >= FORCE_FARM_THRESHOLD:
+		save_abuse_detected.emit("force_farming")
+		WorldMemory.record_ambient("Force farming detected — diminishing returns")
+		# Return diminishing multiplier (0.1 = 90% reduction)
+		return 0.1
+	elif _force_gain_history.size() >= FORCE_FARM_THRESHOLD / 2:
+		# Partial reduction
+		return 0.5
+	return 1.0
+
+## Track dialogue repeats for force-granting conversations.
+func track_dialogue_force(npc_id: String) -> float:
+	_dialogue_repeat_tracker[npc_id] = _dialogue_repeat_tracker.get(npc_id, 0) + 1
+	var count: int = _dialogue_repeat_tracker[npc_id]
+	if count > DIALOGUE_REPEAT_LIMIT:
+		# Diminishing returns — first time full, then less
+		var mult := 1.0 / float(count - DIALOGUE_REPEAT_LIMIT + 1)
+		return mult
+	return 1.0

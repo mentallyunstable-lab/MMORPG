@@ -44,6 +44,7 @@ func _process(delta: float) -> void:
 		_timer = 0.0
 		_apply_passive_effects()
 		_check_atmospheric_callouts()
+		_check_environmental_cues()
 
 	# Atmosphere updates every frame
 	_update_atmosphere(delta)
@@ -216,21 +217,93 @@ func _update_atmosphere(delta: float) -> void:
 
 	decay_level = lerpf(decay_level, target_decay, delta * 0.5)
 
+	# Phase 6: Cap decay jitter — prevent excessive visual noise
+	# Decay rate change is limited to prevent sudden jarring shifts
+	var max_decay_change := delta * MAX_DECAY_RATE
+	decay_level = clampf(decay_level, _prev_decay - max_decay_change, _prev_decay + max_decay_change)
+	_prev_decay = decay_level
+
 	atmosphere_changed.emit(silence_level, decay_level)
+
+
+# --- Phase 6: Jitter and Fatigue Caps ---
+var _prev_decay: float = 0.0
+const MAX_DECAY_RATE := 0.3  # Max decay change per second
+const MIN_CONTRAST_RATIO := 0.15  # Minimum visual contrast (never go fully grey)
 
 
 # --- Visual Decay (M2) ---
 # Fog, desaturation, particle chaos — applied via WorldEnvironment.
 # These are READ by ForceEnvironment or any camera script.
 
-## Get fog density (0-1) based on decay level.
+## Get fog density (0-1) based on decay level. Capped for readability.
 func get_fog_density() -> float:
-	return decay_level * 0.8
+	return minf(decay_level * 0.8, 0.7)  # Cap at 0.7 — never completely obscure
 
-## Get desaturation amount (0=full color, 1=grayscale).
+## Get desaturation amount (0=full color, 1=grayscale). Preserves minimum contrast.
 func get_desaturation() -> float:
-	return decay_level * 0.7
+	return minf(decay_level * 0.7, 0.6)  # Cap at 0.6 — always some color
 
-## Get particle chaos multiplier (1=normal, 3=erratic).
+## Get particle chaos multiplier (1=normal, 3=erratic). Capped for comfort.
 func get_particle_chaos() -> float:
-	return 1.0 + decay_level * 2.0
+	return minf(1.0 + decay_level * 2.0, 2.5)  # Cap at 2.5 — not nauseating
+
+
+# --- Environmental-Only Force Cues (Phase 1.3) ---
+# One environmental cue per force that has NO UI component — purely world-based.
+# These are triggered periodically and read by ForceEnvironment/other world scripts.
+
+signal env_force_cue(force_name: String, cue_type: String, intensity: float)
+
+var _env_cue_timer: float = 0.0
+const ENV_CUE_INTERVAL := 10.0  # Check every 10s
+
+func _check_environmental_cues() -> void:
+	_env_cue_timer += EFFECT_INTERVAL
+	if _env_cue_timer < ENV_CUE_INTERVAL:
+		return
+	_env_cue_timer = 0.0
+
+	# Violence: ground tremor — enemies react, loose objects shift
+	if GameState.violence >= MID_THRESHOLD:
+		var intensity := (GameState.violence - MID_THRESHOLD) / 50.0
+		env_force_cue.emit("violence", "ground_tremor", intensity)
+
+	# Faith: light shifts — candle-like flicker, warmth pulse in environment
+	if GameState.faith >= MID_THRESHOLD:
+		var intensity := (GameState.faith - MID_THRESHOLD) / 50.0
+		env_force_cue.emit("faith", "light_pulse", intensity)
+
+	# Truth: silence pocket — brief moment where ambient sound cuts out
+	if GameState.truth >= MID_THRESHOLD:
+		var intensity := (GameState.truth - MID_THRESHOLD) / 50.0
+		env_force_cue.emit("truth", "silence_pocket", intensity)
+
+
+# --- Force Overlap Prevention (Phase 1.3) ---
+# When multiple forces are high simultaneously, prevent visual cancellation.
+# Returns which force should take visual priority this frame.
+
+func get_visual_priority_force() -> String:
+	# The dominant force gets visual priority
+	# If forces are close (within 10), alternate based on time
+	var dom := GameState.get_dominant_force()
+	var dom_val := GameState.get_force(dom)
+
+	var second_force := ""
+	var second_val := 0.0
+	for f in ["faith", "truth", "violence"]:
+		if f != dom:
+			var v := GameState.get_force(f)
+			if v > second_val:
+				second_val = v
+				second_force = f
+
+	# If forces are close, alternate every 3s to prevent visual muddle
+	if dom_val - second_val < 10.0 and second_val >= MID_THRESHOLD:
+		var cycle := fmod(Time.get_ticks_msec() / 1000.0, 6.0)
+		if cycle < 3.0:
+			return dom
+		return second_force
+
+	return dom

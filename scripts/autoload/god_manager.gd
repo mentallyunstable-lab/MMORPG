@@ -240,6 +240,15 @@ func _process(delta: float) -> void:
 	if current_phase != GamePhase.EARLY:
 		_check_retaliation()
 
+	# False-positive escalation cue (fires once in MID phase)
+	_check_false_positive()
+
+	# Track attention drops — escalation never resets silently
+	_check_attention_decay_notification()
+
+	# God obsession arc progression
+	_check_obsession_arc()
+
 
 ## Add attention from a specific god. Called externally by GodEncounter, shrines, etc.
 func add_god_attention(god_id: String, amount: float) -> void:
@@ -398,6 +407,64 @@ func _emit_god_obsession_event(god_id: String, god_name: String) -> void:
 	WorldMemory.record("god_obsession_%s_%d" % [god_id, randi() % 1000])
 
 
+# --- False-Positive Escalation Cue ---
+# The world lies once: in MID phase, emit a fake god-watching message when no god
+# is actually watching. Creates paranoia. Only fires once per playthrough.
+
+func _check_false_positive() -> void:
+	if _false_positive_fired:
+		return
+	if current_phase != GamePhase.MID:
+		return
+	var score := get_escalation_score()
+	if score < FALSE_POSITIVE_THRESHOLD or score > FALSE_POSITIVE_THRESHOLD + 10.0:
+		return
+	# Check that no god is actually watching
+	for god_id in _god_attention:
+		if _god_attention[god_id] >= ATTENTION_WATCHING:
+			return  # Real watching — no need to lie
+	# The lie: emit a fake watching notification
+	_false_positive_fired = true
+	var fake_messages := [
+		"Something shifts in the periphery. A presence — or the memory of one.",
+		"The ash stirs as if disturbed by breath. But there is no breath here.",
+		"For a moment, the world feels watched. Then it doesn't. You're not sure which is worse.",
+	]
+	WorldEventManager.event_notification.emit(
+		"???", fake_messages[randi() % fake_messages.size()])
+	WorldMemory.record("false_positive_escalation")
+
+
+# --- Escalation Decay Notification ---
+# When god attention drops below a threshold, notify the player.
+# Escalation never resets silently — the world acknowledges the shift.
+
+func _check_attention_decay_notification() -> void:
+	for god_id in _god_attention:
+		var attention: float = _god_attention[god_id]
+		var last_level: String = _last_notified_attention.get(god_id, "")
+		var current_level := _get_attention_level(attention)
+
+		# Detect drops: was at a level, now below it
+		if last_level != "" and current_level == "" and last_level == "noticed":
+			var god_name := get_god_name(god_id)
+			WorldEventManager.event_notification.emit(
+				god_name, "The pressure eases. %s turns away — for now." % god_name)
+			WorldMemory.record_ambient("%s attention decayed from noticed" % god_name)
+		elif last_level == "watching" and current_level in ["noticed", ""]:
+			var god_name := get_god_name(god_id)
+			WorldEventManager.event_notification.emit(
+				god_name, "%s releases its gaze. The world breathes." % god_name)
+			WorldMemory.record_ambient("%s attention decayed from watching" % god_name)
+		elif last_level == "obsessed" and current_level in ["watching", "noticed", ""]:
+			var god_name := get_god_name(god_id)
+			WorldEventManager.event_notification.emit(
+				god_name, "%s withdraws. The obsession fades — but nothing is forgotten." % god_name)
+			WorldMemory.record_ambient("%s attention decayed from obsessed" % god_name)
+
+		_last_notified_attention[god_id] = current_level
+
+
 # --- God Retaliation Events ---
 # Gods punish BOTH silence (neglect) and devotion (obsession).
 # Effects are non-combat: UI distortion, NPC fear, force inversion.
@@ -405,6 +472,15 @@ func _emit_god_obsession_event(god_id: String, god_name: String) -> void:
 var _retaliation_timer: float = 0.0
 const RETALIATION_INTERVAL := 15.0
 var _silence_tracker: Dictionary = {}  # god_id -> float (seconds since last interaction)
+
+# --- False-Positive Cue (Phase 1.2) ---
+# The world lies once: emits a fake escalation cue in MID phase to create paranoia.
+var _false_positive_fired: bool = false
+const FALSE_POSITIVE_THRESHOLD := 40.0  # escalation score where the lie happens
+
+# --- Escalation Reset Tracking (Phase 1.2) ---
+# Escalation never resets silently — notify when attention decays significantly.
+var _last_notified_attention: Dictionary = {}  # god_id -> last notified level
 
 
 ## Called externally whenever the player interacts with anything god-related.
@@ -475,6 +551,128 @@ func _retaliate_devotion(god_id: String, god_name: String) -> void:
 				god_name, "NPCs flinch when you pass. %s clings to you like smoke." % god_name)
 			WorldMemory.record_ambient("NPCs fear divine presence of %s" % god_name)
 	WorldMemory.record("god_retaliation_devotion_%s" % god_id)
+
+
+# --- God Obsession Arc (Phase 3) ---
+# Three stages: ambiguous early → system interruption mid → binary choice late.
+# Each god has its own arc. The arc advances based on attention + phase.
+
+signal obsession_arc_advanced(god_id: String, arc_stage: String)
+signal obsession_invasion_started(god_id: String)
+signal obsession_binary_choice(god_id: String)
+
+var _obsession_arc_stage: Dictionary = {}  # god_id -> "none" | "ambiguous" | "interruption" | "choice"
+var _invasion_active: Dictionary = {}  # god_id -> bool
+var _invasion_timer: float = 0.0
+const INVASION_CHECK_INTERVAL := 20.0
+
+func _check_obsession_arc() -> void:
+	_invasion_timer += ATTENTION_CHECK_INTERVAL
+	if _invasion_timer < INVASION_CHECK_INTERVAL:
+		return
+	_invasion_timer = 0.0
+
+	for god_id in _god_attention:
+		var attention: float = _god_attention[god_id]
+		var stage: String = _obsession_arc_stage.get(god_id, "none")
+		var god_name := get_god_name(god_id)
+
+		# Stage 1: Ambiguous (EARLY phase, attention >= noticed)
+		# The god is maybe watching. Could be paranoia. Ambiguous signals.
+		if stage == "none" and attention >= ATTENTION_NOTICED:
+			_obsession_arc_stage[god_id] = "ambiguous"
+			obsession_arc_advanced.emit(god_id, "ambiguous")
+			var hints := [
+				"Something changed in the way the ash settles near %s's territory." % god_name,
+				"A sound that might be breathing. Or wind. Or nothing.",
+				"The shadows move differently here. Probably nothing.",
+			]
+			WorldEventManager.event_notification.emit("???", hints[randi() % hints.size()])
+			WorldMemory.record("obsession_ambiguous_%s" % god_id)
+
+		# Stage 2: System Interruption (MID phase, attention >= watching)
+		# The god interferes with game mechanics — not just narrative.
+		elif stage == "ambiguous" and attention >= ATTENTION_WATCHING and current_phase != GamePhase.EARLY:
+			_obsession_arc_stage[god_id] = "interruption"
+			obsession_arc_advanced.emit(god_id, "interruption")
+			_apply_system_interruption(god_id, god_name)
+			WorldMemory.record("obsession_interruption_%s" % god_id)
+
+		# Stage 3: Binary Choice (LATE phase, attention >= obsessed)
+		# The player must choose: submit to the god or reject them. No middle ground.
+		elif stage == "interruption" and attention >= ATTENTION_OBSESSED and current_phase == GamePhase.LATE:
+			_obsession_arc_stage[god_id] = "choice"
+			obsession_arc_advanced.emit(god_id, "choice")
+			obsession_binary_choice.emit(god_id)
+			WorldMemory.record("obsession_choice_%s" % god_id)
+
+		# Invasion: if attention is obsessed and in MID+ phase, trigger zone alteration
+		if attention >= ATTENTION_OBSESSED and not _invasion_active.get(god_id, false):
+			if current_phase != GamePhase.EARLY:
+				_trigger_obsession_invasion(god_id, god_name)
+
+
+## System Interruption: the god interferes with game mechanics.
+func _apply_system_interruption(god_id: String, god_name: String) -> void:
+	match god_id:
+		"verath":
+			# Verath locks healing — wounds close on her schedule, not yours
+			WorldEventManager.event_notification.emit(
+				"ASH MOTHER", "Your wounds seal themselves. You didn't ask. Verath decided.")
+			god_event.emit(god_id, "lock_healing", {"duration": 15.0})
+			GameState.player_health = minf(GameState.player_health + 20.0, GameState.player_max_health)
+		"kael":
+			# Kael reveals hidden information — quest objectives glow, enemies visible through walls
+			WorldEventManager.event_notification.emit(
+				"THE BLIND SUN", "Everything is visible. Every secret, every hidden thing. Kael strips the world bare.")
+			god_event.emit(god_id, "reveal_all", {"duration": 10.0})
+			GameState.add_force("truth", 5.0)
+		"null_throne":
+			# Null Throne erases UI elements — HUD components vanish temporarily
+			WorldEventManager.event_notification.emit(
+				"...", "Parts of your awareness dissolve. The Null Throne is editing reality.")
+			god_event.emit(god_id, "erase_ui", {"duration": 8.0})
+			ForceEffects.trigger_silence(8.0, 0.95)
+
+
+## Obsession Invasion: permanent zone alteration. No cutscene. Only mechanics change.
+func _trigger_obsession_invasion(god_id: String, god_name: String) -> void:
+	_invasion_active[god_id] = true
+	obsession_invasion_started.emit(god_id)
+
+	match god_id:
+		"verath":
+			# Permanent: ground spawns occasional heal-then-harm zones
+			WorldEventManager.event_notification.emit(
+				"", "The ground pulses. Verath has rooted herself into the terrain. This will not undo.")
+			WorldMemory.record("invasion_verath")
+			# Permanent corruption increase across all zones
+			for zone_id in GameState.region_state:
+				var region: Dictionary = GameState.get_region(zone_id)
+				region["corruption"] = minf(region.get("corruption", 0.0) + 15.0, 100.0)
+			# Faith permanently elevated
+			GameState.add_force("faith", 8.0)
+		"kael":
+			# Permanent: all force changes are doubled (judgment intensifies everything)
+			WorldEventManager.event_notification.emit(
+				"", "Light sears from the ground. Kael has fused with the zone. Every action weighs more now.")
+			WorldMemory.record("invasion_kael")
+			GameState.add_force("truth", 10.0)
+			# Signal to other systems that Kael's invasion amplifies forces
+			god_event.emit(god_id, "force_amplify", {"multiplier": 2.0, "permanent": true})
+		"null_throne":
+			# Permanent: periodic silence pulses, force drain zone
+			WorldEventManager.event_notification.emit(
+				"", "Silence. Not the absence of sound — the absence of everything. The Null Throne is here now.")
+			WorldMemory.record("invasion_null_throne")
+			# Drain all forces
+			GameState.add_force("faith", -5.0)
+			GameState.add_force("truth", -5.0)
+			GameState.add_force("violence", -5.0)
+			god_event.emit(god_id, "void_zone", {"permanent": true})
+
+	WorldMemory.record("obsession_invasion_%s" % god_id)
+	WorldMemory.record_ambient("God invasion: %s has permanently altered the zone" % god_name)
 
 
 # --- Persistence ---

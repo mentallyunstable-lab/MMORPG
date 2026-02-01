@@ -30,6 +30,10 @@ func _ready() -> void:
 	GameState.force_changed.connect(_on_force_changed)
 	interact_prompt.visible = false
 
+	# Listen for witness mode
+	if WorldEventManager.has_signal("witness_mode_entered"):
+		WorldEventManager.witness_mode_entered.connect(_on_witness_mode)
+
 	# Create tint overlay for force pulses (subtle color wash)
 	_tint_overlay = ColorRect.new()
 	_tint_overlay.color = Color(0, 0, 0, 0)
@@ -185,10 +189,12 @@ func _update_faith_warmth(delta: float) -> void:
 	_faith_warmth = lerpf(_faith_warmth, target, delta * 0.5)
 
 	if _tint_overlay and _faith_warmth > 0.01:
-		# Blend the tint overlay toward golden warmth (doesn't override pulse)
+		# Blend the tint overlay toward muted amber — NOT golden-heroic.
+		# This is atmospheric, not a "buff". Desaturated to avoid looking like a power-up.
 		var current_a := _tint_overlay.color.a
 		if current_a < 0.01:  # Only apply warmth when no pulse is active
-			_tint_overlay.color = Color(0.9, 0.75, 0.4, _faith_warmth)
+			# Muted amber-brown, not bright gold — faith is pressure, not a blessing
+			_tint_overlay.color = Color(0.7, 0.55, 0.35, _faith_warmth * 0.8)
 
 
 ## Brief screen tint pulse in force color when force changes. No numbers. Just color.
@@ -248,3 +254,39 @@ func _apply_degradation_effects() -> void:
 				interact_prompt.text = "[E] Interact"
 		else:
 			interact_prompt.text = "[E] Interact"
+
+	# Witness mode: decay the entire HUD gradually
+	if GameState.witness_mode:
+		_apply_witness_decay(_delta)
+
+
+# --- Witness Mode HUD Decay (Phase 5) ---
+# In witness mode: bars fade, colors desaturate, interact prompt becomes mournful.
+var _witness_decay_progress: float = 0.0
+
+func _on_witness_mode() -> void:
+	_witness_decay_progress = 0.0
+
+func _apply_witness_decay(delta: float) -> void:
+	_witness_decay_progress = minf(_witness_decay_progress + delta * 0.02, 1.0)
+
+	# Desaturate all bars
+	var desat := _witness_decay_progress
+	if faith_bar:
+		faith_bar.modulate = faith_bar.modulate.lerp(Color(0.5, 0.5, 0.5, 0.4), desat)
+	if truth_bar:
+		truth_bar.modulate = truth_bar.modulate.lerp(Color(0.5, 0.5, 0.5, 0.4), desat)
+	if violence_bar:
+		violence_bar.modulate = violence_bar.modulate.lerp(Color(0.5, 0.5, 0.5, 0.4), desat)
+
+	# Health bar fades to nothing — you can't die anymore
+	if health_bar:
+		health_bar.modulate.a = maxf(1.0 - _witness_decay_progress, 0.1)
+
+	# Interact prompt changes
+	if interact_prompt and interact_prompt.visible:
+		interact_prompt.text = "[E] Remember"
+
+	# Tint overlay goes grey
+	if _tint_overlay:
+		_tint_overlay.color = Color(0.3, 0.3, 0.3, _witness_decay_progress * 0.15)

@@ -23,6 +23,11 @@ var _base_sky_horizon: Color
 var _env: Environment = null
 var _sky_mat: ProceduralSkyMaterial = null
 
+# Environmental force cue state
+var _light_pulse_timer: float = 0.0
+var _tremor_timer: float = 0.0
+var _silence_pocket_timer: float = 0.0
+
 
 func _ready() -> void:
 	# Resolve node paths
@@ -49,12 +54,15 @@ func _ready() -> void:
 		_base_light_energy = sun_light.light_energy
 
 	GameState.force_changed.connect(_on_force_changed)
+	ForceEffects.env_force_cue.connect(_on_env_force_cue)
 	_update_environment()
 
 
 func _exit_tree() -> void:
 	if GameState and GameState.force_changed.is_connected(_on_force_changed):
 		GameState.force_changed.disconnect(_on_force_changed)
+	if ForceEffects and ForceEffects.env_force_cue.is_connected(_on_env_force_cue):
+		ForceEffects.env_force_cue.disconnect(_on_env_force_cue)
 
 
 func _on_force_changed(_f: String, _o: float, _n: float) -> void:
@@ -65,6 +73,9 @@ func _process(_delta: float) -> void:
 	# Apply visual decay every frame (driven by ForceEffects.decay_level)
 	_apply_decay()
 
+	# Apply environmental force cues
+	_apply_env_cues(_delta)
+
 
 func _update_environment() -> void:
 	if not _env:
@@ -73,6 +84,21 @@ func _update_environment() -> void:
 	var faith_t := GameState.faith / 100.0
 	var truth_t := GameState.truth / 100.0
 	var violence_t := GameState.violence / 100.0
+
+	# Overlap prevention: boost the priority force, suppress others when close
+	var priority := ForceEffects.get_visual_priority_force()
+	if priority == "faith":
+		faith_t = minf(faith_t * 1.2, 1.0)
+		truth_t *= 0.7
+		violence_t *= 0.7
+	elif priority == "truth":
+		truth_t = minf(truth_t * 1.2, 1.0)
+		faith_t *= 0.7
+		violence_t *= 0.7
+	elif priority == "violence":
+		violence_t = minf(violence_t * 1.2, 1.0)
+		faith_t *= 0.7
+		truth_t *= 0.7
 
 	# --- Fog ---
 	# Faith: clearer, golden tint
@@ -162,3 +188,41 @@ func _apply_decay() -> void:
 	if sun_light:
 		sun_light.light_energy = maxf(sun_light.light_energy - decay * 0.4, 0.05)
 		sun_light.light_color = sun_light.light_color.lerp(Color(0.5, 0.3, 0.2), decay * 0.3)
+
+
+## Handle environmental force cue signals — purely world-based, no UI.
+func _on_env_force_cue(force_name: String, cue_type: String, intensity: float) -> void:
+	match cue_type:
+		"ground_tremor":
+			_tremor_timer = 1.5 * intensity
+		"light_pulse":
+			_light_pulse_timer = 2.0 * intensity
+		"silence_pocket":
+			_silence_pocket_timer = 1.0 * intensity
+			ForceEffects.trigger_silence(1.0 * intensity, 0.4 * intensity)
+
+
+## Apply environmental cues — subtle world-only feedback for force levels.
+func _apply_env_cues(delta: float) -> void:
+	# Violence: ground tremor — camera-independent world shake via light jitter
+	if _tremor_timer > 0:
+		_tremor_timer -= delta
+		if sun_light:
+			var jitter := sin(Time.get_ticks_msec() * 0.05) * _tremor_timer * 0.1
+			sun_light.light_energy = maxf(sun_light.light_energy + jitter, 0.05)
+
+	# Faith: light pulse — warm flicker like candles being relit
+	if _light_pulse_timer > 0:
+		_light_pulse_timer -= delta
+		if sun_light:
+			var pulse := (1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.3) * _light_pulse_timer / 2.0
+			sun_light.light_energy = maxf(sun_light.light_energy + pulse * 0.15, 0.05)
+			sun_light.light_color = sun_light.light_color.lerp(
+				Color(1.0, 0.8, 0.4), _light_pulse_timer * 0.05)
+
+	# Truth: silence pocket handled via ForceEffects.trigger_silence above
+	# Additional visual: fog briefly thins (clarity pulse)
+	if _silence_pocket_timer > 0:
+		_silence_pocket_timer -= delta
+		if _env:
+			_env.fog_density = maxf(_env.fog_density - _silence_pocket_timer * 0.005, 0.0)
