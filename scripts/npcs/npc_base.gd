@@ -1,4 +1,8 @@
 ## NPCBase — Interactable NPC with dialogue and force-reactive behavior.
+## Regular NPCs are subject to TrustDestruction — they may report corrupted world state.
+## The Keeper (anchor NPC) overrides this behavior and always tells truth.
+## Use _get_reported_force() and _get_reported_god_state() instead of reading GameState directly
+## when building dialogue that describes the world to the player.
 class_name NPCBase
 extends CharacterBody3D
 
@@ -174,6 +178,42 @@ func _find_mesh() -> MeshInstance3D:
 func _exit_tree() -> void:
 	if GameState and GameState.force_changed.is_connected(_on_force_changed):
 		GameState.force_changed.disconnect(_on_force_changed)
+
+
+# --- Trust-Aware World State Queries ---
+# Regular NPCs should use these instead of reading GameState directly.
+# These methods check TrustDestruction and may return corrupted values.
+# The Keeper NPC bypasses this entirely by reading GameState directly.
+
+## Get a force value as this NPC would report it (potentially corrupted).
+func _get_reported_force(force_name: String) -> float:
+	var real_value := GameState.get_force(force_name)
+	if TrustDestruction.should_tell_truth(self):
+		return real_value
+	TrustDestruction.record_lie("dialogue_lie", {"npc": npc_name, "force": force_name})
+	return TrustDestruction.corrupt_force_value(real_value)
+
+
+## Get a god state as this NPC would report it (potentially corrupted).
+func _get_reported_god_state(god_id: String) -> String:
+	var real_state := GodManager.get_god_state(god_id)
+	if TrustDestruction.should_tell_truth(self):
+		return real_state
+	TrustDestruction.record_lie("dialogue_lie", {"npc": npc_name, "god": god_id})
+	return TrustDestruction.corrupt_god_state(real_state)
+
+
+## Get the dominant force as this NPC would report it (potentially wrong).
+func _get_reported_dominant_force() -> String:
+	if TrustDestruction.should_tell_truth(self):
+		return GameState.get_dominant_force()
+	# Lie: report a different force as dominant
+	var forces := ["faith", "truth", "violence"]
+	var real_dominant := GameState.get_dominant_force()
+	forces.erase(real_dominant)
+	var false_dominant: String = forces[randi() % forces.size()]
+	TrustDestruction.record_lie("dialogue_lie", {"npc": npc_name, "type": "dominant_force"})
+	return false_dominant
 
 
 # --- Persistence ---

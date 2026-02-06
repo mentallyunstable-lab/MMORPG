@@ -217,6 +217,9 @@ func save_game() -> bool:
 	data["world_memory"] = WorldMemory.save_state()
 	data["god_attention"] = GodManager.save_attention()
 	data["quests"] = QuestManager.save_state()
+	data["anchor"] = AnchorManager.save_state()
+	data["trust"] = TrustDestruction.save_state()
+	data["betrayal_pacing"] = BetrayalPacing.save_state()
 
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file:
@@ -255,6 +258,12 @@ func load_game() -> bool:
 			WorldMemory.load_state(data["world_memory"])
 		if data.has("god_attention"):
 			GodManager.load_attention(data["god_attention"])
+		if data.has("anchor"):
+			AnchorManager.load_state(data["anchor"])
+		if data.has("trust"):
+			TrustDestruction.load_state(data["trust"])
+		if data.has("betrayal_pacing"):
+			BetrayalPacing.load_state(data["betrayal_pacing"])
 		# Don't load quests — they're done
 		WorldEventManager.event_notification.emit(
 			"WITNESS", "This world has ended. You may walk its remains.")
@@ -268,6 +277,12 @@ func load_game() -> bool:
 		GodManager.load_attention(data["god_attention"])
 	if data.has("quests"):
 		QuestManager.load_state(data["quests"])
+	if data.has("anchor"):
+		AnchorManager.load_state(data["anchor"])
+	if data.has("trust"):
+		TrustDestruction.load_state(data["trust"])
+	if data.has("betrayal_pacing"):
+		BetrayalPacing.load_state(data["betrayal_pacing"])
 	return true
 
 
