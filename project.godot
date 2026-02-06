@@ -1,0 +1,46 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Ashborn"
+config/description="A psychological horror game where trust is the first casualty."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.2", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameManager="*res://scripts/core/game_manager.gd"
+AnchorSystem="*res://scripts/systems/player_anchoring/anchor_system.gd"
+BetrayalController="*res://scripts/systems/betrayal/betrayal_controller.gd"
+ForceEconomy="*res://scripts/systems/force_economy/force_manager.gd"
+GodInterference="*res://scripts/systems/gods/god_interference.gd"
+QuestManager="*res://scripts/systems/quests/quest_manager.gd"
+RumorSystem="*res://scripts/systems/world/rumor_system.gd"
+WitnessMode="*res://scripts/systems/experience/witness_mode.gd"
+AudioLies="*res://scripts/systems/experience/audio_lies.gd"
+HauntScore="*res://scripts/systems/metrics/haunt_score.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+
+[debug]
+
+betrayal_overlay=true
+force_economy_visualizer=true
+god_activity_log=true
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

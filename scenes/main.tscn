@@ -1,0 +1,31 @@
+[gd_scene load_steps=2 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Script" path="res://scripts/debug/debug_overlay.gd" id="1_debug"]
+
+[node name="Main" type="Node"]
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+script = ExtResource("1_debug")
+
+[node name="Panel" type="Panel" parent="DebugOverlay"]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -400.0
+offset_bottom = 600.0
+grow_horizontal = 0
+
+[node name="Content" type="RichTextLabel" parent="DebugOverlay/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+bbcode_enabled = true
+text = "Debug Overlay Loading..."

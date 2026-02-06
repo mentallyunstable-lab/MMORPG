@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" fill="#1a1a2e"/>
+  <circle cx="64" cy="64" r="40" fill="none" stroke="#4a0e4e" stroke-width="3"/>
+  <circle cx="64" cy="64" r="25" fill="none" stroke="#8b0a50" stroke-width="2"/>
+  <circle cx="64" cy="64" r="8" fill="#c41e3a"/>
+  <path d="M64 24 L64 40 M64 88 L64 104 M24 64 L40 64 M88 64 L104 64" stroke="#4a0e4e" stroke-width="2"/>
+  <text x="64" y="120" text-anchor="middle" fill="#666" font-family="monospace" font-size="10">ASHBORN</text>
+</svg>
