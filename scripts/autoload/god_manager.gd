@@ -275,7 +275,13 @@ func get_god_attention(god_id: String) -> float:
 
 ## Check for attention-driven events — hallucinations, hostile env, forced encounters.
 ## Phase-gated: early phase suppresses most effects, mid allows watching, late unlocks obsessed.
+## ANCHOR RULE: God attention events cannot target or affect anchor-immune nodes.
+## The anchor's zone of influence is respected — gods cannot warp truth near the Keeper.
 func _check_attention_events() -> void:
+	# If the anchor is present, god interference events are suppressed near it.
+	# Gods can still act, but their reality-warping effects are reduced.
+	var anchor_present := AnchorManager.is_anchor_available()
+
 	for god_id in _god_attention:
 		var attention: float = _god_attention[god_id]
 		if attention < ATTENTION_NOTICED:
@@ -313,19 +319,29 @@ func _check_attention_events() -> void:
 				GameState.add_force("faith", randf_range(-2.0, 2.0))
 
 		# Obsessed: forced encounters + reality warping (late phase only)
+		# ANCHOR RULE: When the anchor is present, obsession events are dampened.
+		# Gods cannot fully warp reality when truth has a foothold.
 		elif attention >= ATTENTION_OBSESSED:
 			var gate := get_phase_gate(0.0, 0.2, 1.0)
 			if gate <= 0.0:
 				continue
-			if randf() < 0.25 * gate:
+			# Anchor dampening: halve obsession event chance when Keeper is present
+			var obsession_chance := 0.25
+			if anchor_present:
+				obsession_chance *= 0.5
+			if randf() < obsession_chance * gate:
 				_emit_god_obsession_event(god_id, god_name)
 			# Force inversion — gods warp the rules
-			if randf() < 0.08 * gate:
-				var forces := ["faith", "truth", "violence"]
-				var target: String = forces[randi() % forces.size()]
-				GameState.add_force(target, randf_range(-3.0, 3.0))
-				WorldEventManager.event_notification.emit(
-					god_name, "The forces shift without reason. %s interferes." % god_name)
+			# ANCHOR RULE: Force inversions blocked entirely when anchor is present
+			if not anchor_present and randf() < 0.08 * gate:
+				# Check betrayal pacing before god interference
+				if BetrayalPacing.can_betray("god_interference"):
+					var forces := ["faith", "truth", "violence"]
+					var target: String = forces[randi() % forces.size()]
+					GameState.add_force(target, randf_range(-3.0, 3.0))
+					WorldEventManager.event_notification.emit(
+						god_name, "The forces shift without reason. %s interferes." % god_name)
+					BetrayalPacing.record_betrayal("god_interference")
 
 
 # --- God Obsession Asymmetry ---
@@ -429,14 +445,26 @@ func _check_retaliation() -> void:
 		var attention: float = _god_attention.get(god_id, 0.0)
 
 		# PUNISHMENT FOR SILENCE: manifest+ gods that are ignored
+		# ANCHOR RULE: Retaliation is dampened (not blocked) near the Keeper.
+		# Gods still notice silence, but the Keeper's presence softens the blow.
 		if state in ["manifest", "ascended"] and silence > 120.0:
-			if randf() < 0.2:
-				_retaliate_silence(god_id, god_name)
+			var retaliation_chance := 0.2
+			if AnchorManager.is_anchor_available():
+				retaliation_chance *= 0.6
+			if randf() < retaliation_chance:
+				if BetrayalPacing.can_betray("god_interference"):
+					_retaliate_silence(god_id, god_name)
+					BetrayalPacing.record_betrayal("god_interference")
 
 		# PUNISHMENT FOR DEVOTION: gods smothered by obsession
 		if attention >= ATTENTION_OBSESSED:
-			if randf() < 0.15:
-				_retaliate_devotion(god_id, god_name)
+			var devotion_chance := 0.15
+			if AnchorManager.is_anchor_available():
+				devotion_chance *= 0.6
+			if randf() < devotion_chance:
+				if BetrayalPacing.can_betray("god_interference"):
+					_retaliate_devotion(god_id, god_name)
+					BetrayalPacing.record_betrayal("god_interference")
 
 
 func _retaliate_silence(god_id: String, god_name: String) -> void:

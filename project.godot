@@ -21,6 +21,9 @@ ItemManager="*res://scripts/autoload/item_manager.gd"
 WorldManager="*res://scripts/autoload/world_manager.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
 WorldMemory="*res://scripts/autoload/world_memory.gd"
+AnchorManager="*res://scripts/autoload/anchor_manager.gd"
+BetrayalPacing="*res://scripts/autoload/betrayal_pacing.gd"
+TrustDestruction="*res://scripts/autoload/trust_destruction.gd"
 DebugTimer="*res://scripts/autoload/debug_timer.gd"
 
 [display]
