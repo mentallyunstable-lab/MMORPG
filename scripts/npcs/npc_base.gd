@@ -53,6 +53,31 @@ func interact(_player: Node) -> void:
 		return
 
 	var dialogue := _get_dialogue()
+
+	# --- Micro-truth injection (Phase 3.5) ---
+	# Regular NPCs may inject small verifiable truths even at low trust levels.
+	# These are mundane, unrewarded, and verifiable — preventing total epistemic collapse.
+	if dialogue.size() > 0 and MicroTruthEvents:
+		var micro_truth := MicroTruthEvents.get_random_truth_for_npc()
+		if not micro_truth.is_empty() and randf() < 0.3:
+			dialogue.insert(dialogue.size() - 1 if dialogue.size() > 1 else 0,
+				{"speaker": npc_name, "text": micro_truth.get("text", "")})
+
+	# --- Silence memory reference (Phase 2.4) ---
+	# NPCs may reference past Keeper silence periods.
+	if dialogue.size() > 0 and SilenceMemory and SilenceMemory.has_notable_silence():
+		if randf() < 0.15:
+			var ref := SilenceMemory.get_silence_reference()
+			if ref != "":
+				dialogue.append({"speaker": npc_name, "text": ref})
+
+	# --- Truth misuse reference (Phase 5.9) ---
+	if dialogue.size() > 0 and TruthMisuse and TruthMisuse.has_misuse_history():
+		if randf() < 0.1:
+			var ref := TruthMisuse.get_misuse_reference()
+			if ref != "":
+				dialogue.append({"speaker": npc_name, "text": ref})
+
 	if dialogue.size() > 0:
 		DialogueManager.start_dialogue(dialogue, npc_name)
 		has_spoken = true
@@ -60,16 +85,24 @@ func interact(_player: Node) -> void:
 
 ## Witness mode: what the player sees instead of a living NPC.
 ## Override in subclasses for specific NPCs. Default: generic corpse/absence.
+## Integrates with AnchorAbsenceLegacy (Phase 7.14): NPCs may unconsciously echo
+## the Keeper's phrasing, implying the anchor changed the world, not ruled it.
 func _get_witness_dialogue() -> Array:
+	var lines: Array = []
 	if has_spoken:
-		return [
-			{"speaker": "...", "text": "A body lies here. You recognize %s." % npc_name},
-			{"speaker": "...", "text": "Whatever they wanted — it doesn't matter now."},
-		]
-	return [
-		{"speaker": "...", "text": "Someone was here. You never spoke to them."},
-		{"speaker": "...", "text": "Their name is scratched into the wall, but you can't read it."},
-	]
+		lines.append({"speaker": "...", "text": "A body lies here. You recognize %s." % npc_name})
+		lines.append({"speaker": "...", "text": "Whatever they wanted — it doesn't matter now."})
+	else:
+		lines.append({"speaker": "...", "text": "Someone was here. You never spoke to them."})
+		lines.append({"speaker": "...", "text": "Their name is scratched into the wall, but you can't read it."})
+
+	# Anchor Absence Legacy echo (Phase 7.14)
+	if AnchorAbsenceLegacy:
+		var echo := AnchorAbsenceLegacy.get_witness_echo()
+		if echo != "":
+			lines.append({"speaker": "...", "text": echo})
+
+	return lines
 
 
 ## Check if this NPC's aligned faction is hostile to the player.

@@ -37,11 +37,13 @@ func _exit_tree() -> void:
 
 
 ## The Keeper's interaction — always truthful, never manipulative.
+## Now integrates with KeeperOverreliance for dependency-aware dialogue.
 func interact(player: Node) -> void:
 	if DialogueManager.is_active:
 		return
 
 	# Witness mode — The Keeper is still here. The only one.
+	# Now with reflection variants based on player history (Phase 7.13).
 	if GameState.witness_mode:
 		var witness_dialogue := _get_witness_dialogue()
 		DialogueManager.start_dialogue(witness_dialogue, npc_name)
@@ -55,7 +57,20 @@ func interact(player: Node) -> void:
 		AnchorManager.record_interaction("silence")
 		return
 
+	# Overreliance warning — if dependency is HIGH, warn before giving info.
+	# No mechanical punishment. Only psychological. (Phase 1.2)
+	if KeeperOverreliance.should_warn_player():
+		var warning := KeeperOverreliance.get_warning_dialogue()
+		# Still give info after warning — Keeper never withholds truth
+		var dialogue := _get_dialogue()
+		warning.append_array(dialogue)
+		DialogueManager.start_dialogue(warning, npc_name)
+		has_spoken = true
+		AnchorManager.record_interaction("world_state")
+		return
+
 	# Normal interaction — truthful world state report
+	# Brevity scales with dependency (Phase 1.2)
 	var dialogue := _get_dialogue()
 	if dialogue.size() > 0:
 		DialogueManager.start_dialogue(dialogue, npc_name)
@@ -64,35 +79,49 @@ func interact(player: Node) -> void:
 
 
 ## Truthful dialogue — reads REAL values from GameState and reports them plainly.
+## Brevity scales with KeeperOverreliance: high dependency = fewer volunteered details.
+## The Keeper NEVER withholds truth when asked directly — but volunteers less at high dependency.
 func _get_dialogue() -> Array:
 	var lines: Array = []
+	var max_details := KeeperOverreliance.get_max_detail_lines()
 
 	# Greeting — always the same. Stable. Recognizable.
 	lines.append({"speaker": npc_name, "text": "I am here."})
 
-	# Report the dominant force — truthfully
+	var detail_count := 0
+
+	# Report the dominant force — truthfully (always included)
 	var dominant := GameState.get_dominant_force()
 	var dom_value := GameState.get_force(dominant)
 	lines.append({"speaker": npc_name, "text": _describe_force_state(dominant, dom_value)})
+	detail_count += 1
 
-	# Report god states — truthfully
-	var god_report := _describe_god_states()
-	if god_report != "":
-		lines.append({"speaker": npc_name, "text": god_report})
+	# Report god states — truthfully (brevity-gated)
+	if detail_count < max_details:
+		var god_report := _describe_god_states()
+		if god_report != "":
+			lines.append({"speaker": npc_name, "text": god_report})
+			detail_count += 1
 
-	# Report world pressure
-	var pressure := GameState.world_pressure
-	if pressure >= 70.0:
-		lines.append({"speaker": npc_name, "text": "The world strains under combined pressure. This is not sustainable."})
-	elif pressure >= 40.0:
-		lines.append({"speaker": npc_name, "text": "The forces are building. The world notices."})
+	# Report world pressure (brevity-gated)
+	if detail_count < max_details:
+		var pressure := GameState.world_pressure
+		if pressure >= 70.0:
+			lines.append({"speaker": npc_name, "text": "The world strains under combined pressure. This is not sustainable."})
+			detail_count += 1
+		elif pressure >= 40.0:
+			lines.append({"speaker": npc_name, "text": "The forces are building. The world notices."})
+			detail_count += 1
 
-	# Report trust level — the Keeper is aware the world lies
-	var trust_desc := TrustDestruction.get_trust_description()
-	if TrustDestruction.trust_level < 0.7:
-		lines.append({"speaker": npc_name, "text": "The world's voice is %s. Be careful what you believe." % trust_desc})
+	# Report trust level — the Keeper is aware the world lies (brevity-gated)
+	if detail_count < max_details:
+		var trust_desc := TrustDestruction.get_trust_description()
+		if TrustDestruction.trust_level < 0.7:
+			lines.append({"speaker": npc_name, "text": "The world's voice is %s. Be careful what you believe." % trust_desc})
+			detail_count += 1
 
 	# Offer choice — but no force manipulation. The Keeper doesn't push.
+	# Choices are ALWAYS available — the Keeper never refuses to answer direct questions.
 	lines.append({"speaker": npc_name, "text": "What would you know?",
 		"choices": [
 			{"text": "Tell me about the forces.", "next_id": "forces_detail"},
@@ -131,6 +160,10 @@ func _get_silence_dialogue() -> Array:
 
 
 ## Witness mode — The Keeper is the only NPC that persists. Not alive. Just... still here.
+## Phase 7.13: Reflection variants based on player history:
+##   - Dependency score (how much they relied on the Keeper)
+##   - Silence exposure (how much silence they endured)
+##   - Truth misuse events (whether they misapplied truth)
 func _get_witness_dialogue() -> Array:
 	var ending := GameState.ending_type
 
@@ -145,11 +178,49 @@ func _get_witness_dialogue() -> Array:
 		_:
 			reflection = "It ended. I watched."
 
-	return [
+	var lines: Array = [
 		{"speaker": npc_name, "text": "I am still here."},
 		{"speaker": npc_name, "text": reflection},
-		{"speaker": npc_name, "text": "You are still here too. That is something."},
 	]
+
+	# --- Anchor Reflection Variants (Phase 7.13) ---
+	# The Keeper's final words change based on how the player related to truth.
+
+	var dependency_tier := KeeperOverreliance.get_dependency_tier()
+	var silence_time := SilenceMemory.get_total_silence_time()
+	var truth_misused := TruthMisuse.has_misuse_history()
+
+	# Dependency reflection
+	match dependency_tier:
+		"high":
+			lines.append({"speaker": npc_name, "text": "You sought certainty. You came to me when the world was unclear."})
+			lines.append({"speaker": npc_name, "text": "I gave you what I could. But certainty was never mine to grant."})
+		"medium":
+			lines.append({"speaker": npc_name, "text": "You returned when you needed to. Not always. Not never."})
+		"low":
+			lines.append({"speaker": npc_name, "text": "You endured uncertainty. You chose without me more often than not."})
+			lines.append({"speaker": npc_name, "text": "That is harder than it sounds."})
+
+	# Silence exposure reflection
+	if silence_time > 300.0:  # More than 5 minutes total
+		lines.append({"speaker": npc_name, "text": "There were times I could not speak. You moved through them."})
+		if SilenceMemory.get_total_silence_decisions() > 5:
+			lines.append({"speaker": npc_name, "text": "You made decisions in my silence. That required something I cannot name."})
+
+	# Truth misuse reflection
+	if truth_misused:
+		lines.append({"speaker": npc_name, "text": "You mistook truth for safety. They are not the same."})
+		lines.append({"speaker": npc_name, "text": "I told you what was real. What you built from it was yours."})
+
+	# God interference reflection
+	if GodInterferenceEvents.has_interference_history():
+		lines.append({"speaker": npc_name, "text": "The gods reached for this place. They could not take it."})
+		lines.append({"speaker": npc_name, "text": "That cost something. I felt it."})
+
+	# Final line — always the same
+	lines.append({"speaker": npc_name, "text": "You are still here too. That is something."})
+
+	return lines
 
 
 # --- Truthful Description Generators ---

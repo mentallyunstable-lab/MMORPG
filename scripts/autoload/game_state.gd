@@ -220,6 +220,16 @@ func save_game() -> bool:
 	data["anchor"] = AnchorManager.save_state()
 	data["trust"] = TrustDestruction.save_state()
 	data["betrayal_pacing"] = BetrayalPacing.save_state()
+	data["keeper_access_cost"] = KeeperAccessCost.save_state()
+	data["keeper_overreliance"] = KeeperOverreliance.save_state()
+	data["silence_fallout"] = SilenceFallout.save_state()
+	data["silence_memory"] = SilenceMemory.save_state()
+	data["micro_truth"] = MicroTruthEvents.save_state()
+	data["delayed_validation"] = DelayedValidation.save_state()
+	data["god_interference"] = GodInterferenceEvents.save_state()
+	data["anchor_strain"] = AnchorStrain.save_state()
+	data["truth_misuse"] = TruthMisuse.save_state()
+	data["anchor_legacy"] = AnchorAbsenceLegacy.save_state()
 
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file:
@@ -264,11 +274,16 @@ func load_game() -> bool:
 			TrustDestruction.load_state(data["trust"])
 		if data.has("betrayal_pacing"):
 			BetrayalPacing.load_state(data["betrayal_pacing"])
+		_load_new_system_states(data)
 		# Don't load quests — they're done
 		WorldEventManager.event_notification.emit(
 			"WITNESS", "This world has ended. You may walk its remains.")
 		WorldMemory.record("witness_mode_entered")
 		return true
+
+	# Anti-save-scum detection (Phase 6.12): notify the system a load occurred
+	if AntiSaveScum:
+		AntiSaveScum.on_game_loaded()
 
 	load_state(data)
 	if data.has("world_memory"):
@@ -283,7 +298,32 @@ func load_game() -> bool:
 		TrustDestruction.load_state(data["trust"])
 	if data.has("betrayal_pacing"):
 		BetrayalPacing.load_state(data["betrayal_pacing"])
+	_load_new_system_states(data)
 	return true
+
+
+## Load new system states (Phase 1-8 additions).
+func _load_new_system_states(data: Dictionary) -> void:
+	if data.has("keeper_access_cost") and KeeperAccessCost:
+		KeeperAccessCost.load_state(data["keeper_access_cost"])
+	if data.has("keeper_overreliance") and KeeperOverreliance:
+		KeeperOverreliance.load_state(data["keeper_overreliance"])
+	if data.has("silence_fallout") and SilenceFallout:
+		SilenceFallout.load_state(data["silence_fallout"])
+	if data.has("silence_memory") and SilenceMemory:
+		SilenceMemory.load_state(data["silence_memory"])
+	if data.has("micro_truth") and MicroTruthEvents:
+		MicroTruthEvents.load_state(data["micro_truth"])
+	if data.has("delayed_validation") and DelayedValidation:
+		DelayedValidation.load_state(data["delayed_validation"])
+	if data.has("god_interference") and GodInterferenceEvents:
+		GodInterferenceEvents.load_state(data["god_interference"])
+	if data.has("anchor_strain") and AnchorStrain:
+		AnchorStrain.load_state(data["anchor_strain"])
+	if data.has("truth_misuse") and TruthMisuse:
+		TruthMisuse.load_state(data["truth_misuse"])
+	if data.has("anchor_legacy") and AnchorAbsenceLegacy:
+		AnchorAbsenceLegacy.load_state(data["anchor_legacy"])
 
 
 ## Called when an ending is reached — locks the save permanently.

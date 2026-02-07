@@ -150,17 +150,26 @@ func _update_state() -> void:
 
 
 ## Check if the world is too unstable for the anchor to speak.
+## Integrates with AnchorStrain (Phase 4.8): high strain lowers the silence threshold,
+## making the Keeper go silent more easily under pressure.
 func _check_silence_conditions() -> bool:
 	# Witness mode: The Keeper is always present and always speaks (post-ending reflection)
 	if GameState.witness_mode:
 		return false
 
+	# Use strain-adjusted thresholds when AnchorStrain is available
+	var eff_pressure_threshold := SILENCE_PRESSURE_THRESHOLD
+	var eff_attention_threshold := SILENCE_ATTENTION_THRESHOLD
+	if AnchorStrain:
+		eff_pressure_threshold = AnchorStrain.get_effective_silence_threshold()
+		eff_attention_threshold = AnchorStrain.get_effective_attention_threshold()
+
 	var pressure := GameState.world_pressure
-	if pressure >= SILENCE_PRESSURE_THRESHOLD:
+	if pressure >= eff_pressure_threshold:
 		return true
 
 	var max_attention := _get_max_god_attention()
-	if max_attention >= SILENCE_ATTENTION_THRESHOLD:
+	if max_attention >= eff_attention_threshold:
 		return true
 
 	return false
