@@ -54,6 +54,7 @@ func _process(delta: float) -> void:
 
 
 ## Recalculate trust level based on current world state.
+## Integrates with SilenceFallout (Phase 2.3): Keeper silence accelerates trust decay.
 func _update_trust_level() -> void:
 	var pressure := GameState.world_pressure
 	var max_attention := 0.0
@@ -62,7 +63,11 @@ func _update_trust_level() -> void:
 
 	# Trust decays when world is unstable
 	if pressure > 50.0 or max_attention > 40.0:
-		trust_level -= TRUST_DECAY_RATE
+		# SilenceFallout integration: Keeper silence accelerates decay by 25-40%
+		var decay_mult := 1.0
+		if SilenceFallout:
+			decay_mult = SilenceFallout.get_trust_decay_multiplier()
+		trust_level -= TRUST_DECAY_RATE * decay_mult
 	else:
 		trust_level += TRUST_RECOVERY_RATE
 

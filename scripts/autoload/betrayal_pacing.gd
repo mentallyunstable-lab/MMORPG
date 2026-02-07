@@ -12,10 +12,18 @@
 ##   god_interference — God warps forces, UI, or environment
 ##   audio_phantom    — Sound cue for something that isn't there
 ##   save_corruption  — Save feedback lies (says saved, didn't / says failed, did)
+##
+## Cross-Contamination (Phase 6.11):
+##   Certain betrayals temporarily bias the probability of related betrayal types.
+##   Effects are PRESSURE, not additional lies. Respects overlap rules.
+##     - dialogue_lie → increases faction misreport chance
+##     - save_corruption → increases ambient paranoia cues
+##     - god_interference → increases environmental misdirection pressure
 extends Node
 
 signal betrayal_occurred(betrayal_type: String, timestamp: float)
 signal cooldown_started(duration: float)
+signal contamination_applied(source_type: String, bias_target: String)
 
 # --- Global Cooldown ---
 # After any core betrayal, no other core betrayal can fire for this duration.
@@ -60,6 +68,20 @@ const CONFLICTING_PAIRS := [
 var _betrayal_history: Array = []  # [{type, timestamp}]
 const MAX_HISTORY := 30
 
+# --- Cross-Contamination (Phase 6.11) ---
+# When a betrayal fires, it can temporarily bias related categories.
+# This prevents predictable patterns without adding additional lies.
+const CONTAMINATION_RULES := {
+	"dialogue_lie": {"bias_target": "env_misdirect", "bias_amount": 0.15, "duration": 120.0},
+	"save_corruption": {"bias_target": "audio_phantom", "bias_amount": 0.2, "duration": 180.0},
+	"god_interference": {"bias_target": "env_misdirect", "bias_amount": 0.1, "duration": 90.0},
+	"env_misdirect": {"bias_target": "dialogue_lie", "bias_amount": 0.1, "duration": 90.0},
+	"quest_corruption": {"bias_target": "god_interference", "bias_amount": 0.15, "duration": 150.0},
+}
+
+# Active contamination biases: target_type -> {amount, expires_at}
+var _active_biases: Dictionary = {}
+
 
 func _process(delta: float) -> void:
 	# Tick down global cooldown
@@ -70,6 +92,15 @@ func _process(delta: float) -> void:
 	for cat in _category_cooldowns:
 		if _category_cooldowns[cat] > 0:
 			_category_cooldowns[cat] -= delta
+
+	# Expire contamination biases
+	var now := Time.get_unix_time_from_system()
+	var expired: Array[String] = []
+	for target in _active_biases:
+		if _active_biases[target].get("expires_at", 0.0) < now:
+			expired.append(target)
+	for t in expired:
+		_active_biases.erase(t)
 
 
 ## Core API: Can a betrayal of this type fire right now?
@@ -118,6 +149,39 @@ func record_betrayal(betrayal_type: String) -> void:
 
 	betrayal_occurred.emit(betrayal_type, now)
 
+	# Apply cross-contamination: this betrayal biases a related category
+	_apply_contamination(betrayal_type, now)
+
+
+## Apply cross-contamination bias when a betrayal fires.
+func _apply_contamination(betrayal_type: String, now: float) -> void:
+	if not CONTAMINATION_RULES.has(betrayal_type):
+		return
+
+	var rule: Dictionary = CONTAMINATION_RULES[betrayal_type]
+	var target: String = rule.get("bias_target", "")
+	var amount: float = rule.get("bias_amount", 0.0)
+	var duration: float = rule.get("duration", 60.0)
+
+	if target == "":
+		return
+
+	_active_biases[target] = {
+		"amount": amount,
+		"source": betrayal_type,
+		"expires_at": now + duration,
+	}
+
+	contamination_applied.emit(betrayal_type, target)
+
+
+## Get the contamination bias for a betrayal type.
+## Returns a probability boost (0.0 to 0.2) that other systems can factor in.
+func get_contamination_bias(betrayal_type: String) -> float:
+	if _active_biases.has(betrayal_type):
+		return _active_biases[betrayal_type].get("amount", 0.0)
+	return 0.0
+
 
 ## Check overlap rules — would this betrayal type conflict with a recent one?
 func _would_overlap(betrayal_type: String) -> bool:
@@ -150,6 +214,7 @@ func get_debug_info() -> Dictionary:
 		"category_cooldowns": _category_cooldowns.duplicate(),
 		"total_betrayals": _betrayal_history.size(),
 		"history": _betrayal_history.duplicate(),
+		"active_biases": _active_biases.duplicate(),
 	}
 
 
