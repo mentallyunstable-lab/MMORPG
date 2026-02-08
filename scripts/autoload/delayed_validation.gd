@@ -86,7 +86,7 @@ func _check_pending_claims() -> void:
 
 	for claim_id in _pending_claims:
 		var claim: Dictionary = _pending_claims[claim_id]
-		var age := now - claim.get("timestamp", 0.0)
+		var age: float = now - claim.get("timestamp", 0.0)
 
 		# Must wait minimum delay
 		if age < MIN_VALIDATION_DELAY:
@@ -157,7 +157,7 @@ func _expire_old_claims() -> void:
 	var to_erase: Array[String] = []
 
 	for claim_id in _pending_claims:
-		var age := now - _pending_claims[claim_id].get("timestamp", 0.0)
+		var age: float = now - _pending_claims[claim_id].get("timestamp", 0.0)
 		if age > MAX_CLAIM_AGE:
 			to_erase.append(claim_id)
 

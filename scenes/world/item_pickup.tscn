@@ -9,7 +9,7 @@ height = 0.5
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pickup"]
 albedo_color = Color(0.8, 0.6, 0.2, 1)
 emission_enabled = true
-emission = Color(0.9, 0.7, 0.3)
+emission = Color(0.9, 0.7, 0.3, 1)
 emission_energy_multiplier = 1.0
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_pickup"]

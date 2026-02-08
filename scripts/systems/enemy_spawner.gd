@@ -35,7 +35,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	# Clean dead references
-	_spawned = _spawned.filter(func(e): return is_instance_valid(e) and not e.is_dead)
+	_spawned = _spawned.filter(func(e): return is_instance_valid(e) and not e.get("is_dead"))
 
 	_timer += delta
 	if _timer >= spawn_interval and _spawned.size() < max_enemies:
@@ -54,9 +54,9 @@ func _spawn_enemy() -> void:
 		0,
 		randf_range(-spawn_radius, spawn_radius)
 	)
-	enemy.global_position = global_position + offset
 
 	get_parent().add_child(enemy)
+	enemy.global_position = global_position + offset
 	_spawned.append(enemy)
 
 

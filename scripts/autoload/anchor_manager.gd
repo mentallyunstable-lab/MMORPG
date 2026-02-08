@@ -191,8 +191,8 @@ func _set_state(new_state: AnchorState) -> void:
 	current_state = new_state
 	_last_state_change = Time.get_unix_time_from_system()
 
-	var old_name := _state_names.get(old_state, "unknown")
-	var new_name := _state_names.get(new_state, "unknown")
+	var old_name: String = _state_names.get(old_state, "unknown")
+	var new_name: String = _state_names.get(new_state, "unknown")
 	anchor_state_changed.emit(old_name, new_name)
 
 	# Log distinctly to WorldMemory

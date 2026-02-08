@@ -122,7 +122,7 @@ func _evaluate_misuse() -> void:
 
 	var latest_revelation: Dictionary = _keeper_revelations[_keeper_revelations.size() - 1]
 	var now := Time.get_unix_time_from_system()
-	var revelation_age := now - latest_revelation.get("timestamp", 0.0)
+	var revelation_age: float = now - latest_revelation.get("timestamp", 0.0)
 
 	# Only evaluate after the action window closes
 	if revelation_age < ACTION_WINDOW:
@@ -157,7 +157,7 @@ func _check_force_misuse(action: Dictionary, revelation: Dictionary) -> void:
 			})
 
 	# Misuse: player ignored a force imbalance the Keeper revealed
-	var pressure_diff := GameState.world_pressure - revelation.get("pressure", 0.0)
+	var pressure_diff: float = GameState.world_pressure - revelation.get("pressure", 0.0)
 	if pressure_diff > 15.0:
 		_record_misuse("pressure_ignored", {
 			"force": force_name,

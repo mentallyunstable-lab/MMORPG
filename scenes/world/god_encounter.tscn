@@ -11,7 +11,7 @@ height = 3.0
 albedo_color = Color(0.2, 0.15, 0.1, 1)
 roughness = 0.5
 emission_enabled = true
-emission = Color(0.4, 0.2, 0.1)
+emission = Color(0.4, 0.2, 0.1, 1)
 emission_energy_multiplier = 0.8
 
 [sub_resource type="BoxMesh" id="BoxMesh_altar"]

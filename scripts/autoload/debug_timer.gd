@@ -56,7 +56,7 @@ func _on_event_notification(title: String, _desc: String) -> void:
 		_first_god_encounter = _elapsed()
 
 
-func _on_dialogue_started() -> void:
+func _on_dialogue_started(_speaker: String = "") -> void:
 	if not enabled:
 		return
 	if _first_dialogue < 0:
