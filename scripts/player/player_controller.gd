@@ -64,6 +64,14 @@ func _ready() -> void:
 	add_to_group("player")
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_spawn_position = global_position
+	print("[PlayerController] _ready() fired — script is loaded. input_enabled=", input_enabled)
+
+
+func _process(_delta: float) -> void:
+	if Input.is_action_just_pressed("move_forward"):
+		print("[PlayerController] W pressed! input_enabled=", input_enabled, " is_dead=", is_dead)
+	if Input.is_action_just_pressed("jump"):
+		print("[PlayerController] Space pressed! input_enabled=", input_enabled, " is_dead=", is_dead)
 
 
 func _unhandled_input(event: InputEvent) -> void:

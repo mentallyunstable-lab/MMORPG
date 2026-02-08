@@ -7,6 +7,12 @@
 ##   MEDIUM (30-60): Keeper becomes briefer. Less volunteered info.
 ##   HIGH (60+):    Keeper warns the player explicitly. Dialogue shifts tone.
 ##
+## A2 Extensions:
+##   - Pre-emptive NPC doubt: NPCs question player agency at high dependency
+##   - Keeper-before-attempt detection: dependency rises faster if player asks Keeper
+##     before trying other dialogue sources
+##   - Empathy word stripping: Keeper loses warmth before losing information
+##
 ## The goal is to make the player FEEL the cost of certainty-seeking
 ## without ever breaking the Keeper's core promise of truthfulness.
 extends Node
@@ -40,6 +46,29 @@ var _current_tier: String = "low"
 # 0.0 = normal verbosity, 1.0 = maximally brief
 var brevity_level: float = 0.0
 
+# --- A2: Pre-emptive Seeking Detection ---
+# Tracks if player talks to Keeper BEFORE attempting other NPCs.
+# If this pattern repeats, dependency rises faster.
+var _last_npc_dialogue_time: float = 0.0  # Last time player talked to a non-Keeper NPC
+var _keeper_before_attempt_count: int = 0  # Times Keeper was consulted before any NPC
+const KEEPER_FIRST_PENALTY := 1.5  # Dependency multiplier when Keeper is always first
+
+# --- A2: Empathy Erosion ---
+# Keeper dialogue loses empathy words before losing information.
+# This tracks the erosion level (0.0 = warm, 1.0 = clinical).
+var empathy_erosion: float = 0.0
+
+# --- A2: NPC Agency Doubt ---
+# At medium+ dependency, NPCs begin questioning player autonomy.
+const NPC_DOUBT_LINES := [
+	"Did you decide that, or did someone tell you?",
+	"You sound certain. Whose certainty is it?",
+	"That's not your voice. That's something you were told.",
+	"You came here already knowing what to say. Who told you?",
+	"I can hear the Keeper in your words. Where are YOUR words?",
+	"Strange — you speak like someone who already has the answer.",
+]
+
 
 func _ready() -> void:
 	AnchorManager.anchor_spoke.connect(_on_keeper_spoke)
@@ -56,7 +85,8 @@ func _process(delta: float) -> void:
 
 ## Track when Keeper speaks.
 func _on_keeper_spoke(topic: String) -> void:
-	_last_keeper_visit_time = Time.get_unix_time_from_system()
+	var now := Time.get_unix_time_from_system()
+	_last_keeper_visit_time = now
 
 	# Snapshot what the Keeper told the player
 	_last_keeper_info = {
@@ -67,6 +97,12 @@ func _on_keeper_spoke(topic: String) -> void:
 		"timestamp": _last_keeper_visit_time,
 	}
 
+	# --- A2: Keeper-before-attempt detection ---
+	# If player hasn't talked to any NPC since last Keeper visit, they're seeking
+	# Keeper first. This accelerates dependency.
+	if _last_npc_dialogue_time < _last_keeper_visit_time - DECISION_WINDOW:
+		_keeper_before_attempt_count += 1
+
 	# Check for contradictory return pattern:
 	# Player comes back, world hasn't changed much, but they still need reassurance
 	if topic == "world_state" and _total_decisions == 0:
@@ -74,9 +110,11 @@ func _on_keeper_spoke(topic: String) -> void:
 		_contradictory_returns += 1
 
 
-## Track dialogue ending (proxy for a "decision cycle").
+## Track dialogue ending — also used to track non-Keeper NPC interaction.
 func _on_dialogue_ended() -> void:
-	pass  # Decisions are tracked via force changes instead
+	# Track when player talks to anyone other than the Keeper
+	if DialogueManager.current_speaker != "The Keeper" and DialogueManager.current_speaker != "":
+		_last_npc_dialogue_time = Time.get_unix_time_from_system()
 
 
 ## Track force-changing decisions as player actions.
@@ -108,9 +146,16 @@ func _recalculate_dependency() -> void:
 	# Factor 3: Raw visit frequency from KeeperAccessCost
 	var visit_pressure := clampf(KeeperAccessCost.keeper_visits_last_hour * 4.0, 0.0, 30.0)
 
+	# --- A2: Factor 4: Keeper-before-attempt penalty ---
+	# If player consistently consults Keeper before trying other NPCs,
+	# dependency rises faster.
+	var keeper_first_mult := 1.0
+	if _keeper_before_attempt_count > 3:
+		keeper_first_mult = KEEPER_FIRST_PENALTY
+
 	# Weighted sum
 	anchor_dependency_score = clampf(
-		decision_ratio * 50.0 + return_pressure + visit_pressure,
+		(decision_ratio * 50.0 + return_pressure + visit_pressure) * keeper_first_mult,
 		0.0, 100.0
 	)
 
@@ -139,6 +184,11 @@ func _recalculate_dependency() -> void:
 
 	if absf(old_brevity - brevity_level) > 0.01:
 		keeper_brevity_level_changed.emit(brevity_level)
+
+	# --- A2: Empathy erosion ---
+	# Keeper loses warmth before losing information.
+	# Erosion tracks with dependency but leads it slightly.
+	empathy_erosion = clampf(anchor_dependency_score / 80.0, 0.0, 1.0)
 
 
 ## Get the current dependency tier.
@@ -176,6 +226,49 @@ func get_max_detail_lines() -> int:
 		return 1  # Minimal: just the essential truth
 
 
+## A2: Should an NPC pre-emptively doubt the player's agency?
+## Returns a doubt line, or empty string if no doubt should occur.
+func get_npc_agency_doubt() -> String:
+	if DevToggles.disable_psychological_hooks:
+		return ""
+	if _current_tier == "low":
+		return ""
+	# Medium: 15% chance. High: 35% chance.
+	var doubt_chance := 0.15 if _current_tier == "medium" else 0.35
+	if randf() >= doubt_chance:
+		return ""
+	return NPC_DOUBT_LINES[randi() % NPC_DOUBT_LINES.size()]
+
+
+## A2: Strip empathy words from Keeper dialogue.
+## Returns the text with warmth removed at high erosion levels.
+## Empathy goes first, information stays.
+func strip_empathy(text: String) -> String:
+	if empathy_erosion < 0.3:
+		return text
+	# Progressive stripping: soft words first, then qualifiers
+	var result := text
+	if empathy_erosion >= 0.3:
+		# Remove hedging and softeners
+		result = result.replace("I think ", "")
+		result = result.replace("Perhaps ", "")
+		result = result.replace("It seems ", "")
+		result = result.replace("I believe ", "")
+	if empathy_erosion >= 0.5:
+		# Remove emotional acknowledgment
+		result = result.replace("I understand.", "")
+		result = result.replace("I see.", "")
+		result = result.replace("That is hard.", "")
+		result = result.replace("That must be difficult.", "")
+	if empathy_erosion >= 0.7:
+		# Remove all courtesy
+		result = result.replace("Be careful.", "")
+		result = result.replace("Take care.", "")
+		result = result.replace("I am sorry.", "")
+		result = result.replace("I wish I could help more.", "")
+	return result.strip_edges()
+
+
 # --- Debug API ---
 
 func get_debug_info() -> Dictionary:
@@ -183,6 +276,8 @@ func get_debug_info() -> Dictionary:
 		"dependency_score": anchor_dependency_score,
 		"tier": _current_tier,
 		"brevity": brevity_level,
+		"empathy_erosion": empathy_erosion,
+		"keeper_before_attempt": _keeper_before_attempt_count,
 		"total_decisions": _total_decisions,
 		"decisions_after_keeper": _decisions_after_keeper,
 		"contradictory_returns": _contradictory_returns,
