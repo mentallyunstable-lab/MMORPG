@@ -7,10 +7,17 @@
 ## This reinforces epistemic responsibility: knowing a fact is not the same as
 ## understanding how to act on it. The Keeper tells truth — but truth misapplied
 ## can be worse than a lie.
+## B3 Extensions — Truth Misuse Social Decay:
+##   - NPCs withhold context after misuse events (not lying, just less helpful)
+##   - Player reputation shifts: "liar" → "technically correct but dangerous"
+##   - One NPC defends the player using truth — and makes everything worse
 extends Node
 
 signal truth_misused(event_id: String, details: Dictionary)
 signal misuse_consequence(event_id: String, npc_reaction: String)
+signal context_withheld(npc_name: String)
+signal reputation_shifted(new_reputation: String)
+signal defender_backfire(defender_line: String, consequence: String)
 
 # --- Tracking ---
 # When the Keeper shares truth, we snapshot what was revealed.
@@ -32,6 +39,63 @@ var _last_keeper_time: float = 0.0
 # --- Detection ---
 const CHECK_INTERVAL := 30.0
 var _check_timer: float = 0.0
+
+# --- B3: Context Withholding ---
+# After misuse events, NPCs give less context. Not lying — just... less.
+# context_withholding_level: 0.0 = full context, 1.0 = minimal context
+var context_withholding_level: float = 0.0
+const WITHHOLDING_PER_MISUSE := 0.15   # Each misuse increases withholding
+const WITHHOLDING_DECAY_RATE := 0.001  # Very slow decay per tick
+const WITHHOLDING_MAX := 0.8           # Never fully silent — that's the Keeper's domain
+
+# --- B3: Reputation System ---
+# Not binary "trusted/untrusted" — a spectrum of how NPCs perceive truth usage.
+var misuse_reputation: String = "unknown"  # "unknown", "careless", "dangerous", "weaponized"
+const REPUTATION_THRESHOLDS := {
+	"careless": 2,      # After 2 misuse events
+	"dangerous": 5,     # After 5 misuse events
+	"weaponized": 10,   # After 10 misuse events
+}
+
+# NPC lines for each reputation level — these are what they SAY about you
+const REPUTATION_LINES := {
+	"unknown": [],
+	"careless": [
+		"You know things. You just don't know what they mean yet.",
+		"Careful with what you've learned. It cuts both ways.",
+	],
+	"dangerous": [
+		"You're technically correct. That's the most dangerous kind of correct.",
+		"The truth in your hands is a weapon you don't know how to hold.",
+		"You're not wrong. That's what makes you dangerous.",
+		"Knowing the truth and understanding it are different skills. You have one.",
+	],
+	"weaponized": [
+		"Don't tell me what you know. I've seen what happens when you share.",
+		"The last person you 'helped' with the truth is still paying for it.",
+		"You speak truth like it's a hammer. Everything looks like a nail to you.",
+	],
+}
+
+# --- B3: The Defender ---
+# One NPC archetype who defends the player's truth usage — and makes it worse.
+# Their defense validates the player but escalates NPC distrust.
+const DEFENDER_LINES := [
+	"They're not wrong, you know. Everything they said was accurate.",
+	"I checked. What they told us was true. Every word.",
+	"You blame them for knowing? For TELLING you?",
+	"The truth they shared saved lives. That it also cost lives isn't their fault.",
+	"At least someone is willing to say what's real. Even if it hurts.",
+]
+const DEFENDER_CONSEQUENCES := [
+	"The defense lands badly. Other NPCs trust the player less, not more.",
+	"The defender's insistence makes others suspicious of BOTH of them.",
+	"Being defended makes the player look like they NEED defending.",
+	"The truth of the defense makes the damage feel more intentional.",
+	"Other NPCs now avoid the defender too.",
+]
+var _defender_active: bool = false
+var _defender_event_count: int = 0
 
 
 func _ready() -> void:
@@ -136,6 +200,9 @@ func _evaluate_misuse() -> void:
 			"faction_change":
 				_check_faction_misuse(action, latest_revelation)
 
+	# B3: Update context withholding and reputation after each evaluation
+	_update_social_decay()
+
 	_post_keeper_actions.clear()
 
 
@@ -207,10 +274,81 @@ func _record_misuse(event_type: String, details: Dictionary) -> void:
 	misuse_consequence.emit(event_id, reaction)
 
 
+# --- B3: Social Decay ---
+
+## Update withholding level and reputation based on accumulated misuse.
+func _update_social_decay() -> void:
+	# Context withholding scales with misuse count
+	var target := clampf(_misuse_events.size() * WITHHOLDING_PER_MISUSE, 0.0, WITHHOLDING_MAX)
+	context_withholding_level = lerpf(context_withholding_level, target, 0.1)
+
+	# Reputation shifts
+	var old_rep := misuse_reputation
+	var count := _misuse_events.size()
+	if count >= REPUTATION_THRESHOLDS["weaponized"]:
+		misuse_reputation = "weaponized"
+	elif count >= REPUTATION_THRESHOLDS["dangerous"]:
+		misuse_reputation = "dangerous"
+	elif count >= REPUTATION_THRESHOLDS["careless"]:
+		misuse_reputation = "careless"
+	else:
+		misuse_reputation = "unknown"
+
+	if old_rep != misuse_reputation:
+		reputation_shifted.emit(misuse_reputation)
+
+	# Withholding natural decay (very slow)
+	context_withholding_level = maxf(context_withholding_level - WITHHOLDING_DECAY_RATE, 0.0)
+
+
+## B3: Should an NPC withhold context from the player?
+## Returns true if the NPC should give less detail than normal.
+func should_withhold_context() -> bool:
+	return randf() < context_withholding_level
+
+
+## B3: Get a reputation-aware NPC line about the player.
+func get_reputation_line() -> String:
+	var lines: Array = REPUTATION_LINES.get(misuse_reputation, [])
+	if lines.is_empty():
+		return ""
+	return lines[randi() % lines.size()]
+
+
+## B3: Trigger the defender NPC event.
+## One NPC defends the player using truth — and makes things worse.
+## Returns the defender's line and the consequence description.
+func trigger_defender_event() -> Dictionary:
+	if _misuse_events.size() < 3:
+		return {}  # Need at least 3 misuse events before defender appears
+
+	_defender_active = true
+	_defender_event_count += 1
+
+	var line: String = DEFENDER_LINES[randi() % DEFENDER_LINES.size()]
+	var consequence: String = DEFENDER_CONSEQUENCES[randi() % DEFENDER_CONSEQUENCES.size()]
+
+	# The defense INCREASES withholding — the opposite of what the defender intended
+	context_withholding_level = clampf(context_withholding_level + 0.1, 0.0, WITHHOLDING_MAX)
+
+	defender_backfire.emit(line, consequence)
+	return {"line": line, "consequence": consequence}
+
+
+## B3: Has the defender been triggered?
+func is_defender_active() -> bool:
+	return _defender_active
+
+
 ## Get NPC dialogue referencing truth misuse (for npc_base integration).
+## Now reputation-aware (B3): lines change based on accumulated misuse.
 func get_misuse_reference() -> String:
 	if _misuse_events.is_empty():
 		return ""
+	# Prefer reputation-specific lines when available
+	var rep_line := get_reputation_line()
+	if rep_line != "":
+		return rep_line
 	var references := [
 		"You knew the truth and still chose wrong. That's worse than ignorance.",
 		"The Keeper's words were honest. Your interpretation was not.",
@@ -237,6 +375,10 @@ func get_debug_info() -> Dictionary:
 		"pending_actions": _post_keeper_actions.size(),
 		"revelations": _keeper_revelations.size(),
 		"events": _misuse_events.duplicate(),
+		"context_withholding": context_withholding_level,
+		"reputation": misuse_reputation,
+		"defender_active": _defender_active,
+		"defender_events": _defender_event_count,
 	}
 
 
@@ -245,6 +387,9 @@ func get_debug_info() -> Dictionary:
 func save_state() -> Dictionary:
 	return {
 		"misuse_events": _misuse_events.duplicate(),
+		"context_withholding": context_withholding_level,
+		"reputation": misuse_reputation,
+		"defender_event_count": _defender_event_count,
 	}
 
 
@@ -253,3 +398,6 @@ func load_state(data: Dictionary) -> void:
 	_misuse_events.clear()
 	for event in loaded:
 		_misuse_events.append(event)
+	context_withholding_level = data.get("context_withholding", 0.0)
+	misuse_reputation = data.get("reputation", "unknown")
+	_defender_event_count = data.get("defender_event_count", 0)

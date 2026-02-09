@@ -120,6 +120,10 @@ func _get_dialogue() -> Array:
 			lines.append({"speaker": npc_name, "text": "The world's voice is %s. Be careful what you believe." % trust_desc})
 			detail_count += 1
 
+	# C1: Info reordering at high strain — important info moves to the end
+	if AnchorStrain and AnchorStrain.get_info_reorder_factor() > 0.3:
+		lines = _reorder_by_strain(lines)
+
 	# Offer choice — but no force manipulation. The Keeper doesn't push.
 	# Choices are ALWAYS available — the Keeper never refuses to answer direct questions.
 	lines.append({"speaker": npc_name, "text": "What would you know?",
@@ -221,6 +225,24 @@ func _get_witness_dialogue() -> Array:
 	lines.append({"speaker": npc_name, "text": "You are still here too. That is something."})
 
 	return lines
+
+
+# --- C1: Strain-Aware Info Reordering ---
+# At high strain, the Keeper's answers are still correct but trivial info comes first.
+# Important information (pressure warnings, trust level) gets pushed to the end.
+# The information is all there. The player just has to wait longer to hear what matters.
+
+func _reorder_by_strain(lines: Array) -> Array:
+	if lines.size() <= 2:
+		return lines  # Don't reorder if too few lines
+	# Keep greeting at position 0
+	var greeting: Dictionary = lines[0]
+	var content: Array = lines.slice(1)
+	# Reverse the content — puts important info (added early) at the end
+	content.reverse()
+	var result: Array = [greeting]
+	result.append_array(content)
+	return result
 
 
 # --- Truthful Description Generators ---

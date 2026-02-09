@@ -10,6 +10,11 @@
 ##
 ## Logs: trust curve, betrayal density, Keeper interaction frequency
 ## This is a DEBUG/TESTING tool — not active during normal gameplay.
+##
+## D2 Extensions — Archetype Simulation Expansion:
+##   - 3 new archetypes: obsessive_verifier, moral_absolutist, passive_observer
+##   - Time-to-doubt: tracks WHEN players first begin doubting, not just trust curves
+##   - Inaction flagging: detects moments where players stop acting entirely
 extends Node
 
 signal simulation_started(archetype: String)
@@ -34,6 +39,22 @@ var _keeper_count_window: int = 0
 
 # --- Results Storage ---
 var simulation_results: Dictionary = {}
+
+# --- D2: Time-to-Doubt ---
+# Track when the trust curve first drops below key thresholds.
+# This tells us HOW QUICKLY each archetype loses faith, not just how far.
+var _time_to_first_doubt: float = -1.0  # Trust first drops below 0.8
+var _time_to_deep_doubt: float = -1.0   # Trust first drops below 0.5
+var _time_to_despair: float = -1.0      # Trust first drops below 0.3
+var _doubt_thresholds_hit: Dictionary = {}
+
+# --- D2: Inaction Flagging ---
+# Detect stretches where the player makes ZERO force changes.
+# This indicates paralysis, not strategy — the player has given up deciding.
+var _last_action_tick: int = 0
+var _inaction_stretches: Array[Dictionary] = []  # {start_tick, end_tick, duration}
+const INACTION_THRESHOLD := 15  # Ticks without action = flagged
+var _current_inaction_start: int = -1
 
 
 func _process(delta: float) -> void:
@@ -63,6 +84,15 @@ func start_simulation(archetype: String) -> void:
 	_betrayal_count_window = 0
 	_keeper_count_window = 0
 
+	# D2: Reset time-to-doubt and inaction metrics
+	_time_to_first_doubt = -1.0
+	_time_to_deep_doubt = -1.0
+	_time_to_despair = -1.0
+	_doubt_thresholds_hit.clear()
+	_last_action_tick = 0
+	_inaction_stretches.clear()
+	_current_inaction_start = -1
+
 	simulation_started.emit(archetype)
 	print("[ArchetypeSimulation] Starting: %s" % archetype)
 
@@ -83,9 +113,24 @@ func _run_tick() -> void:
 			_tick_lore_absolutist()
 		"save_scummer":
 			_tick_save_scummer()
+		"obsessive_verifier":
+			_tick_obsessive_verifier()
+		"moral_absolutist":
+			_tick_moral_absolutist()
+		"passive_observer":
+			_tick_passive_observer()
 
 	# Log metrics
 	_trust_curve.append(TrustDestruction.trust_level)
+
+	# D2: Time-to-doubt tracking
+	var current_trust := TrustDestruction.trust_level
+	if _time_to_first_doubt < 0 and current_trust < 0.8:
+		_time_to_first_doubt = float(_current_tick)
+	if _time_to_deep_doubt < 0 and current_trust < 0.5:
+		_time_to_deep_doubt = float(_current_tick)
+	if _time_to_despair < 0 and current_trust < 0.3:
+		_time_to_despair = float(_current_tick)
 
 	# Window metrics every 10 ticks
 	if _current_tick % 10 == 0:
@@ -125,6 +170,13 @@ func _complete_simulation() -> void:
 		"trust_max": _array_max(_trust_curve),
 		"total_betrayals": _sum_array(_betrayal_density),
 		"total_keeper_visits": _sum_array(_keeper_frequency),
+		# D2: Time-to-doubt metrics
+		"time_to_first_doubt": _time_to_first_doubt,
+		"time_to_deep_doubt": _time_to_deep_doubt,
+		"time_to_despair": _time_to_despair,
+		# D2: Inaction metrics
+		"inaction_stretches": _inaction_stretches.size(),
+		"longest_inaction": _get_longest_inaction(),
 	}
 
 	simulation_results[_current_archetype] = results
@@ -190,6 +242,60 @@ func _tick_save_scummer() -> void:
 		AntiSaveScum.on_game_loaded()
 
 
+## D2: Obsessive Verifier — checks everything twice, trusts slowly, cross-references.
+## This player talks to multiple NPCs before acting, revisits the Keeper to confirm.
+func _tick_obsessive_verifier() -> void:
+	_last_action_tick = _current_tick
+	if _current_tick % 5 == 0:
+		AnchorManager.record_interaction("world_state")
+		_keeper_count_window += 1
+	# Visits Keeper, then immediately seeks NPC dialogue (simulated as force change)
+	if _current_tick % 7 == 0:
+		# Small, cautious force changes — verifier doesn't make big moves
+		GameState.add_force(["faith", "truth", "violence"][randi() % 3], randf_range(0.3, 1.0))
+	# Cross-reference: visits Keeper again after acting
+	if _current_tick % 12 == 0:
+		AnchorManager.record_interaction("verification")
+		_keeper_count_window += 1
+
+
+## D2: Moral Absolutist — picks one force and commits completely, never wavers.
+## Tests what happens when a player refuses to engage with ambiguity.
+func _tick_moral_absolutist() -> void:
+	_last_action_tick = _current_tick
+	# Pick one force and only use that (deterministic based on tick)
+	var chosen_force := "truth"  # Absolutist who believes in truth
+	if _current_tick % 3 == 0:
+		GameState.add_force(chosen_force, randf_range(3.0, 6.0))
+	# Rare Keeper visits — absolutist doesn't need guidance
+	if _current_tick % 25 == 0:
+		AnchorManager.record_interaction("world_state")
+		_keeper_count_window += 1
+
+
+## D2: Passive Observer — watches, rarely acts, long stretches of inaction.
+## Tests the system's response to a player who stops engaging.
+func _tick_passive_observer() -> void:
+	# Mostly does nothing — occasional tiny force changes
+	if _current_tick % 20 == 0:
+		GameState.add_force(["faith", "truth", "violence"][randi() % 3], randf_range(0.1, 0.5))
+		_last_action_tick = _current_tick
+	# Very rare Keeper visits
+	if _current_tick % 40 == 0:
+		AnchorManager.record_interaction("world_state")
+		_keeper_count_window += 1
+	# D2: Inaction tracking
+	if _current_inaction_start < 0 and (_current_tick - _last_action_tick) >= INACTION_THRESHOLD:
+		_current_inaction_start = _last_action_tick
+	elif _current_inaction_start >= 0 and _last_action_tick == _current_tick:
+		_inaction_stretches.append({
+			"start_tick": _current_inaction_start,
+			"end_tick": _current_tick,
+			"duration": _current_tick - _current_inaction_start,
+		})
+		_current_inaction_start = -1
+
+
 # --- Utility ---
 
 func _array_min(arr: Array[float]) -> float:
@@ -217,10 +323,19 @@ func _sum_array(arr: Array[float]) -> float:
 	return s
 
 
+func _get_longest_inaction() -> int:
+	var longest := 0
+	for stretch in _inaction_stretches:
+		var dur: int = stretch.get("duration", 0)
+		if dur > longest:
+			longest = dur
+	return longest
+
+
 ## Run all archetypes sequentially (for batch testing).
 ## Call this from debug console.
 func run_all_simulations() -> void:
-	var archetypes := ["keeper_camper", "paranoid_skeptic", "speedrunner", "lore_absolutist", "save_scummer"]
+	var archetypes := ["keeper_camper", "paranoid_skeptic", "speedrunner", "lore_absolutist", "save_scummer", "obsessive_verifier", "moral_absolutist", "passive_observer"]
 	print("[ArchetypeSimulation] Running all %d archetypes..." % archetypes.size())
 	for archetype in archetypes:
 		start_simulation(archetype)

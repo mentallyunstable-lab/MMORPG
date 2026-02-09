@@ -5,10 +5,15 @@
 ## This is essential for rebuilding belief without collapsing uncertainty.
 ## If truth is always immediate, players just check facts. If truth is delayed,
 ## players must hold ambiguity — and that's where real epistemic engagement lives.
+## B2 Extensions — Delayed Validation Cruelty:
+##   - Post-failure validation: truth confirmed only after player failed by ignoring it
+##   - Casual NPC validation: NPCs mention past correctness in passing, never as rewards
+##   - Unlogged moments: these validations are NEVER recorded to quest log or journal
 extends Node
 
 signal claim_recorded(claim_id: String, npc_name: String)
 signal claim_validated(claim_id: String, npc_name: String)
+signal cruel_validation(claim_id: String, npc_line: String)
 
 # --- Pending Claims ---
 # Claims are statements NPCs make that CAN be verified later.
@@ -29,6 +34,22 @@ var _check_timer: float = 0.0
 # Claims validated too quickly feel like immediate confirmation.
 const MIN_VALIDATION_DELAY := 300.0   # 5 minutes
 const MAX_CLAIM_AGE := 7200.0         # Claims expire after 2 hours
+
+# --- B2: Post-Failure Validation ---
+# Claims that were correct but ignored by the player, validated only after failure.
+var _failed_validations: Array[Dictionary] = []
+const MAX_FAILED_VALIDATIONS := 10
+
+# Casual NPC validation lines — delivered without weight, as passing remarks.
+# The cruelty is in the casualness. No fanfare. No "I told you so."
+const CASUAL_VALIDATION_LINES := [
+	"You know... you were right earlier. About the %s.",
+	"Funny — turns out what you said was true. Didn't matter, though.",
+	"Someone mentioned the same thing you did. Before it happened.",
+	"I keep thinking about what you said. It was accurate. Just... late.",
+	"You called it. Not that it helped anyone.",
+	"That thing you noticed? You were correct. The timing was wrong, not you.",
+]
 
 
 func _ready() -> void:
@@ -194,12 +215,75 @@ func has_validated_claims() -> bool:
 	return _validated_claims.size() > 0
 
 
+## B2: Record that the player failed at something — check if any pending claims
+## would have helped them. If so, validate the claim NOW (too late to matter).
+## This is never logged explicitly. The player must notice on their own.
+func record_player_failure(failure_type: String, failure_details: Dictionary) -> void:
+	var validated_after_failure: Array[String] = []
+	for claim_id in _pending_claims:
+		var claim: Dictionary = _pending_claims[claim_id]
+		var claim_type: String = claim.get("claim_type", "")
+
+		# Check if this claim would have prevented the failure
+		var relevant := false
+		match failure_type:
+			"force_spike":
+				relevant = claim_type == "force_prediction"
+			"faction_hostile":
+				relevant = claim_type == "faction_prediction"
+			"god_death":
+				relevant = claim_type == "god_prediction"
+			_:
+				relevant = claim_type == "event_prediction"
+
+		if relevant and _is_claim_validated(claim):
+			validated_after_failure.append(claim_id)
+			_failed_validations.append({
+				"claim_id": claim_id,
+				"npc_name": claim.get("npc_name", ""),
+				"failure_type": failure_type,
+				"validated_at": Time.get_unix_time_from_system(),
+			})
+			if _failed_validations.size() > MAX_FAILED_VALIDATIONS:
+				_failed_validations.pop_front()
+
+			# Generate casual NPC line — NOT logged to WorldMemory
+			var topic: String = claim.get("data", {}).get("force", failure_type)
+			var line: String = CASUAL_VALIDATION_LINES[randi() % CASUAL_VALIDATION_LINES.size()]
+			if "%s" in line:
+				line = line % topic
+			cruel_validation.emit(claim_id, line)
+
+	for cid in validated_after_failure:
+		_pending_claims.erase(cid)
+
+
+## B2: Get a casual validation line for NPC dialogue.
+## Returns empty string if no failed validations exist.
+## These are NEVER logged. The player must notice them organically.
+func get_casual_validation_line() -> String:
+	if _failed_validations.is_empty():
+		return ""
+	var fv: Dictionary = _failed_validations[randi() % _failed_validations.size()]
+	var topic: String = fv.get("failure_type", "something")
+	var line: String = CASUAL_VALIDATION_LINES[randi() % CASUAL_VALIDATION_LINES.size()]
+	if "%s" in line:
+		line = line % topic
+	return line
+
+
+## B2: Has the player been validated after failure? (For NPC dialogue gating.)
+func has_cruel_validations() -> bool:
+	return _failed_validations.size() > 0
+
+
 # --- Debug API ---
 
 func get_debug_info() -> Dictionary:
 	return {
 		"pending_claims": _pending_claims.size(),
 		"validated_claims": _validated_claims.size(),
+		"failed_validations": _failed_validations.size(),
 		"claim_ids": _pending_claims.keys(),
 	}
 
