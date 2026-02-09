@@ -1,10 +1,16 @@
 ## DialogueManager — Controls dialogue flow, choices, and force-based branching.
+##
+## E1 Extensions — Dialogue Timing Pass:
+##   - Micro-delays (200-800ms) before hard truths
+##   - Removal of perfect pacing — add awkward pauses
+##   - Occasionally cut Keeper lines short
 extends Node
 
 signal dialogue_started(speaker: String)
 signal dialogue_line(speaker: String, text: String)
 signal dialogue_choices_presented(choices: Array)
 signal dialogue_ended()
+signal dialogue_line_delayed(speaker: String, text: String, delay_ms: float)
 
 var is_active: bool = false
 var current_dialogue: Array = []  # Array of dialogue entries
@@ -16,6 +22,22 @@ var ui_node: Control = null
 
 # Guard against infinite recursion when skipping gated lines.
 const _MAX_SKIP_DEPTH := 50
+
+# --- E1: Dialogue Timing ---
+# Hard truths get micro-delays. Awkward pauses break perfect pacing.
+# Keeper lines can be cut short at high strain.
+var _pending_delay_ms: float = 0.0
+
+# Keywords that trigger micro-delays before delivery
+const HARD_TRUTH_KEYWORDS := [
+	"dead", "dying", "fading", "corrupted", "hostile",
+	"strains", "overwhelming", "cannot", "broken", "lost",
+	"silence", "gone", "nothing", "never", "worst",
+]
+const MICRO_DELAY_MIN_MS := 200.0
+const MICRO_DELAY_MAX_MS := 800.0
+const AWKWARD_PAUSE_CHANCE := 0.15  # 15% chance of extra pause on any line
+const AWKWARD_PAUSE_MS := 400.0
 
 
 ## Start a dialogue sequence.
@@ -89,6 +111,14 @@ func advance(_skip_depth: int = 0) -> void:
 	var speaker: String = entry.get("speaker", current_speaker)
 	var text: String = entry.get("text", "")
 
+	# E1: Calculate timing delay for this line
+	var delay_ms := _calculate_line_delay(speaker, text)
+	if delay_ms > 0.0 and not (DevToggles and DevToggles.disable_dialogue_timing):
+		_pending_delay_ms = delay_ms
+		dialogue_line_delayed.emit(speaker, text, delay_ms)
+	else:
+		_pending_delay_ms = 0.0
+
 	dialogue_line.emit(speaker, text)
 
 	if entry.has("choices"):
@@ -157,7 +187,59 @@ func end_dialogue() -> void:
 	is_active = false
 	current_dialogue = []
 	current_index = -1
+	_pending_delay_ms = 0.0
 	dialogue_ended.emit()
 
 	# Restore player input
 	get_tree().call_group("player", "set_input_enabled", true)
+
+
+# --- E1: Dialogue Timing ---
+
+## Calculate delay before displaying a line.
+## Hard truths get micro-delays. Random lines get awkward pauses.
+## Keeper lines at high strain get additional pause from AnchorStrain.
+func _calculate_line_delay(speaker: String, text: String) -> float:
+	var delay := 0.0
+	var text_lower := text.to_lower()
+
+	# Check for hard truth keywords
+	for keyword in HARD_TRUTH_KEYWORDS:
+		if keyword in text_lower:
+			delay = randf_range(MICRO_DELAY_MIN_MS, MICRO_DELAY_MAX_MS)
+			break
+
+	# Random awkward pause on any line
+	if delay == 0.0 and randf() < AWKWARD_PAUSE_CHANCE:
+		delay = AWKWARD_PAUSE_MS
+
+	# Keeper-specific: AnchorStrain adds hesitation
+	if speaker == "The Keeper" and AnchorStrain:
+		delay += AnchorStrain.get_dialogue_pause_ms()
+
+	return delay
+
+
+## Get the current pending delay (for UI to use).
+func get_pending_delay_ms() -> float:
+	return _pending_delay_ms
+
+
+## E1: Optionally cut a Keeper line short at high strain.
+## Returns the truncated text, or original if no cut.
+func maybe_cut_line_short(speaker: String, text: String) -> String:
+	if speaker != "The Keeper":
+		return text
+	if not AnchorStrain:
+		return text
+	# Only cut at HIGH+ strain, 20% chance
+	if AnchorStrain.anchor_strain < AnchorStrain.STRAIN_HIGH:
+		return text
+	if randf() >= 0.2:
+		return text
+	# Cut at a sentence boundary or mid-phrase
+	var sentences := text.split(". ")
+	if sentences.size() <= 1:
+		return text
+	# Keep first sentence, cut the rest
+	return sentences[0] + "."

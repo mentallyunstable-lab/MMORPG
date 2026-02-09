@@ -15,12 +15,25 @@ const FORCE_COLORS := {
 }
 
 
+# E1: Delayed line display
+var _delay_timer: Timer = null
+var _delayed_speaker: String = ""
+var _delayed_text: String = ""
+
+
 func _ready() -> void:
 	DialogueManager.ui_node = self
 	DialogueManager.dialogue_started.connect(_on_dialogue_started)
 	DialogueManager.dialogue_line.connect(_on_dialogue_line)
 	DialogueManager.dialogue_choices_presented.connect(_on_choices_presented)
 	DialogueManager.dialogue_ended.connect(_on_dialogue_ended)
+	DialogueManager.dialogue_line_delayed.connect(_on_dialogue_line_delayed)
+
+	# E1: Create delay timer
+	_delay_timer = Timer.new()
+	_delay_timer.one_shot = true
+	_delay_timer.timeout.connect(_on_delay_finished)
+	add_child(_delay_timer)
 
 	panel.visible = false
 
@@ -56,8 +69,21 @@ func _on_dialogue_started(_speaker: String) -> void:
 
 
 func _on_dialogue_line(speaker: String, text: String) -> void:
+	# E1: If there's a pending delay, show "..." first, then reveal after timer
+	var delay_ms := DialogueManager.get_pending_delay_ms()
+	if delay_ms > 0.0:
+		speaker_label.text = speaker
+		text_label.text = "..."
+		_delayed_speaker = speaker
+		# E1: Apply line cutting for strained Keeper
+		_delayed_text = DialogueManager.maybe_cut_line_short(speaker, text)
+		_delay_timer.start(delay_ms / 1000.0)
+		_clear_choices()
+		choices_container.visible = false
+		continue_label.visible = false
+		return
 	speaker_label.text = speaker
-	text_label.text = text
+	text_label.text = DialogueManager.maybe_cut_line_short(speaker, text)
 	_clear_choices()
 	choices_container.visible = false
 	continue_label.visible = true
@@ -90,6 +116,18 @@ func _on_choice_selected(index: int) -> void:
 func _on_dialogue_ended() -> void:
 	panel.visible = false
 	_clear_choices()
+
+
+## E1: Called when a delayed line signal fires (used for internal tracking).
+func _on_dialogue_line_delayed(_speaker: String, _text: String, _delay_ms: float) -> void:
+	pass  # Actual delay handling is in _on_dialogue_line
+
+
+## E1: Delay timer finished — reveal the actual text.
+func _on_delay_finished() -> void:
+	text_label.text = _delayed_text
+	continue_label.visible = true
+	continue_label.text = "[E] Continue"
 
 
 func _clear_choices() -> void:

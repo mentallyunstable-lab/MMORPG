@@ -168,6 +168,55 @@ var witness_mode: bool = false  # True when exploring post-ending world
 const SAVE_PATH := "user://ashborn_save.dat"
 const CLOSED_MESSAGE := "This world has concluded."
 
+# --- E3: Player Journal ---
+# The journal auto-fills with the player's INTERPRETATIONS, not facts.
+# Some entries contradict earlier ones. The player cannot edit them.
+# This is not a quest log — it's a record of what the player THOUGHT was true.
+signal journal_entry_added(text: String)
+var _journal_entries: Array[Dictionary] = []
+const MAX_JOURNAL_ENTRIES := 30
+
+
+## Add an auto-interpretation journal entry.
+## These are written in the player's "voice" — what they BELIEVE, not what IS.
+func add_journal_interpretation(text: String, can_contradict: bool = false) -> void:
+	var entry := {
+		"text": text,
+		"timestamp": Time.get_unix_time_from_system(),
+		"can_contradict": can_contradict,
+	}
+	_journal_entries.append(entry)
+	if _journal_entries.size() > MAX_JOURNAL_ENTRIES:
+		_journal_entries.pop_front()
+	journal_entry_added.emit(text)
+
+
+## Get all journal entries.
+func get_journal_entries() -> Array[Dictionary]:
+	return _journal_entries
+
+
+## E3: Check if a new entry contradicts any existing one.
+## Returns the contradicted entry text, or empty string.
+func check_journal_contradiction(new_text: String) -> String:
+	for entry in _journal_entries:
+		if not entry.get("can_contradict", false):
+			continue
+		# Simple heuristic: entries about the same topic that differ
+		var old_text: String = entry.get("text", "")
+		if _texts_share_topic(old_text, new_text) and old_text != new_text:
+			return old_text
+	return ""
+
+
+func _texts_share_topic(a: String, b: String) -> bool:
+	# Check if both texts reference the same force, god, or faction
+	var topics := ["faith", "truth", "violence", "keeper", "silence", "gods"]
+	for topic in topics:
+		if topic in a.to_lower() and topic in b.to_lower():
+			return true
+	return false
+
 # --- Save Restrictions (Step 7) ---
 # Manual save only. No saving during god attention spikes. Witness mode = no saving.
 # Save zones are designated safe areas (interactables with "save_point" group).
@@ -347,6 +396,7 @@ func save_state() -> Dictionary:
 		"player_health": player_health,
 		"player_max_health": player_max_health,
 		"player_alive": player_alive,
+		"journal_entries": _journal_entries.duplicate(),
 	}
 
 
@@ -360,3 +410,7 @@ func load_state(data: Dictionary) -> void:
 	player_health = data.get("player_health", 100.0)
 	player_max_health = data.get("player_max_health", 100.0)
 	player_alive = data.get("player_alive", true)
+	var loaded_journal = data.get("journal_entries", [])
+	_journal_entries.clear()
+	for entry in loaded_journal:
+		_journal_entries.append(entry)

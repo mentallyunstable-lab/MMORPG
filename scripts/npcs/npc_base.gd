@@ -3,6 +3,16 @@
 ## The Keeper (anchor NPC) overrides this behavior and always tells truth.
 ## Use _get_reported_force() and _get_reported_god_state() instead of reading GameState directly
 ## when building dialogue that describes the world to the player.
+##
+## E2 Extensions — Language Degradation:
+##   - As trust drops, NPC grammar simplifies and vocabulary shrinks
+##   - Certainty words increase ("always", "never") as uncertainty grows
+##   - Keeper language never degrades — the contrast must hurt
+##
+## E3 Extensions — Player Self-Doubt Hooks:
+##   - NPCs ask reflective questions with no response option
+##   - Journal auto-fills with interpretations, not facts
+##   - Some entries later contradict earlier ones
 class_name NPCBase
 extends CharacterBody3D
 
@@ -78,9 +88,44 @@ func interact(_player: Node) -> void:
 			if ref != "":
 				dialogue.append({"speaker": npc_name, "text": ref})
 
+	# --- E2: Language degradation ---
+	if dialogue.size() > 0 and not (DevToggles and DevToggles.disable_language_degradation):
+		dialogue = _apply_language_degradation(dialogue)
+
+	# --- E3: Self-doubt hooks ---
+	if dialogue.size() > 0 and not (DevToggles and DevToggles.disable_psychological_hooks):
+		dialogue = _inject_self_doubt_hooks(dialogue)
+
+	# --- B3: Context withholding (from TruthMisuse) ---
+	if dialogue.size() > 0 and TruthMisuse and TruthMisuse.should_withhold_context():
+		dialogue = _apply_context_withholding(dialogue)
+
+	# --- A3: NPC memory conflict injection ---
+	if dialogue.size() > 0 and SilenceFallout and SilenceFallout.is_in_fallout_window():
+		var conflict := SilenceFallout.get_npc_memory_conflict()
+		if not conflict.is_empty() and randf() < 0.2:
+			dialogue.append({"speaker": npc_name, "text": conflict.get("version_a", "")})
+
+	# --- A2: NPC agency doubt ---
+	if dialogue.size() > 0 and KeeperOverreliance:
+		var doubt_line := KeeperOverreliance.get_agency_doubt_line()
+		if doubt_line != "":
+			dialogue.append({"speaker": npc_name, "text": doubt_line})
+
+	# --- C2: Keeper misquote ---
+	if dialogue.size() > 0 and AnchorAbsenceLegacy and AnchorManager.current_state != AnchorManager.AnchorState.PRESENT:
+		if randf() < 0.12:
+			var misquote := AnchorAbsenceLegacy.get_keeper_misquote()
+			if misquote != "":
+				dialogue.append({"speaker": npc_name, "text": misquote})
+
 	if dialogue.size() > 0:
 		DialogueManager.start_dialogue(dialogue, npc_name)
 		has_spoken = true
+
+		# E3: Auto-fill journal with interpretation (not fact)
+		if not (DevToggles and DevToggles.disable_psychological_hooks):
+			_auto_journal_interpretation()
 
 
 ## Witness mode: what the player sees instead of a living NPC.
@@ -211,6 +256,157 @@ func _find_mesh() -> MeshInstance3D:
 func _exit_tree() -> void:
 	if GameState and GameState.force_changed.is_connected(_on_force_changed):
 		GameState.force_changed.disconnect(_on_force_changed)
+
+
+# --- E2: Language Degradation ---
+# As trust drops, NPC grammar simplifies and vocabulary shrinks.
+# Certainty words INCREASE as actual certainty decreases.
+# The Keeper never degrades — the contrast is the cruelty.
+
+const CERTAINTY_WORDS := ["always", "never", "definitely", "absolutely", "everyone", "no one", "certain"]
+const DEGRADED_CONNECTORS := ["and", "but", "so"]
+const REFLECTIVE_QUESTIONS := [
+	"Do you even know why you came here?",
+	"When was the last time you decided something on your own?",
+	"What would you do if the Keeper stopped speaking?",
+	"Are you looking for truth or just for someone to tell you what's true?",
+	"Did you decide that, or were you told to?",
+	"How many of your choices were actually yours?",
+	"What are you afraid of finding out?",
+]
+
+## E2: Apply language degradation to dialogue based on trust level.
+func _apply_language_degradation(dialogue: Array) -> Array:
+	var trust := TrustDestruction.trust_level
+	if trust > 0.7:
+		return dialogue  # No degradation at high trust
+
+	var degradation := 1.0 - clampf((trust - 0.15) / 0.55, 0.0, 1.0)  # 0.0 at trust 0.7, 1.0 at trust 0.15
+
+	for i in range(dialogue.size()):
+		var entry: Dictionary = dialogue[i]
+		if not entry.has("text"):
+			continue
+		var text: String = entry["text"]
+
+		# Simplify sentence structure at medium degradation
+		if degradation > 0.3:
+			text = _simplify_grammar(text, degradation)
+
+		# Insert certainty words at high degradation
+		if degradation > 0.5 and randf() < degradation * 0.4:
+			text = _inject_certainty(text)
+
+		dialogue[i]["text"] = text
+
+	return dialogue
+
+
+## Simplify grammar: shorter sentences, simpler connectors.
+func _simplify_grammar(text: String, degradation: float) -> String:
+	# Replace complex punctuation with periods
+	if degradation > 0.6:
+		text = text.replace(";", ".")
+		text = text.replace(" — ", ". ")
+	# At extreme degradation, strip subordinate clauses (rough heuristic)
+	if degradation > 0.8:
+		var sentences := text.split(". ")
+		if sentences.size() > 2:
+			# Keep only first two sentences
+			text = sentences[0] + ". " + sentences[1] + "."
+	return text
+
+
+## Inject certainty words — the more uncertain the world, the more certain the NPC sounds.
+func _inject_certainty(text: String) -> String:
+	var word: String = CERTAINTY_WORDS[randi() % CERTAINTY_WORDS.size()]
+	# Prepend certainty as emphasis
+	if randf() < 0.5:
+		return "%s, %s" % [word.capitalize(), text[0].to_lower() + text.substr(1)]
+	return text
+
+
+# --- E3: Self-Doubt Hooks ---
+
+## Inject reflective questions that have no response option.
+## These are questions the player cannot answer. They sit there.
+func _inject_self_doubt_hooks(dialogue: Array) -> Array:
+	# Only inject at lower trust or after misuse
+	var should_inject := TrustDestruction.trust_level < 0.6
+	if not should_inject and TruthMisuse and TruthMisuse.has_misuse_history():
+		should_inject = true
+	if not should_inject:
+		return dialogue
+
+	# 12% chance per interaction
+	if randf() >= 0.12:
+		return dialogue
+
+	var question: String = REFLECTIVE_QUESTIONS[randi() % REFLECTIVE_QUESTIONS.size()]
+	# Insert before the last line (before choices if present)
+	var insert_pos := dialogue.size() - 1
+	if insert_pos < 0:
+		insert_pos = 0
+	dialogue.insert(insert_pos, {"speaker": npc_name, "text": question})
+
+	return dialogue
+
+
+# --- E3: Journal Auto-Fill ---
+
+## Auto-fill the player journal with an interpretation of the NPC interaction.
+## These are NOT facts — they're what the player THINKS happened.
+func _auto_journal_interpretation() -> void:
+	if randf() >= 0.25:  # 25% chance per interaction
+		return
+
+	var dominant := GameState.get_dominant_force()
+	var trust := TrustDestruction.trust_level
+	var interpretations := []
+
+	if trust < 0.4:
+		interpretations = [
+			"%s seemed nervous. Probably lying." % npc_name,
+			"I don't think %s was telling the truth about %s." % [npc_name, dominant],
+			"%s knows more than they're saying." % npc_name,
+			"Can't trust %s. Can't trust anyone right now." % npc_name,
+		]
+	elif trust < 0.7:
+		interpretations = [
+			"%s mentioned %s. Hard to know if it matters." % [npc_name, dominant],
+			"Spoke to %s. They seemed... uncertain about things." % npc_name,
+			"I think %s was being honest. I think." % npc_name,
+		]
+	else:
+		interpretations = [
+			"Spoke to %s. Nothing unusual." % npc_name,
+			"%s seems to know what's happening around here." % npc_name,
+		]
+
+	var text: String = interpretations[randi() % interpretations.size()]
+
+	# E3: Check for contradiction with existing entries
+	var contradiction := GameState.check_journal_contradiction(text)
+	GameState.add_journal_interpretation(text, true)
+
+
+# --- B3: Context Withholding ---
+
+## Remove detail lines from dialogue when context is being withheld.
+func _apply_context_withholding(dialogue: Array) -> Array:
+	if dialogue.size() <= 2:
+		return dialogue  # Don't strip if too short
+	# Remove 1-2 non-essential lines (not first, not last, not choices)
+	var removable: Array[int] = []
+	for i in range(1, dialogue.size() - 1):
+		if not dialogue[i].has("choices") and not dialogue[i].has("id"):
+			removable.append(i)
+	if removable.is_empty():
+		return dialogue
+	# Remove one line
+	var idx: int = removable[randi() % removable.size()]
+	dialogue.remove_at(idx)
+	return dialogue
 
 
 # --- Trust-Aware World State Queries ---

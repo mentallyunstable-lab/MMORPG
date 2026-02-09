@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.5", "Forward Plus")
 
 [autoload]
 
+DevToggles="*res://scripts/autoload/dev_toggles.gd"
 GameState="*res://scripts/autoload/game_state.gd"
 ForceEffects="*res://scripts/autoload/force_effects.gd"
 FactionManager="*res://scripts/autoload/faction_manager.gd"

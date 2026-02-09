@@ -8,9 +8,15 @@
 ## Probability of micro-truths INCREASES as trust approaches the floor.
 ## This is the anti-nihilism valve: even when the world is deeply unreliable,
 ## some small things remain true. Not everything is a lie.
+## B1 Extensions — Micro-Truth Weaponization:
+##   - Truth contradictions: two truths, both correct, lead to incompatible actions
+##   - Too-late truths: truths that are useful only after the window for acting has passed
+##   - NPC-helping truths: truths that help NPCs but harm the player
 extends Node
 
 signal micro_truth_seeded(truth_type: String, content: String)
+signal truth_contradiction_seeded(truth_a: String, truth_b: String)
+signal too_late_truth_revealed(truth: String, missed_window: float)
 
 # --- Truth Seeding ---
 # As trust_level drops toward TRUST_FLOOR, micro-truths become more common.
@@ -40,6 +46,32 @@ var _total_seeded: int = 0
 # Mundane facts about the world that can be independently verified.
 const TRUTH_TYPES := ["direction", "count", "weather", "name", "state"]
 
+# --- B1: Truth Contradictions ---
+# Two truths, both verifiably correct, that lead to incompatible actions.
+# The player must choose which truth to act on. Both are right. Both can't be followed.
+var _active_contradictions: Array[Dictionary] = []
+const MAX_ACTIVE_CONTRADICTIONS := 3
+const CONTRADICTION_CHECK_INTERVAL := 45.0
+var _contradiction_timer: float = 0.0
+
+# --- B1: Too-Late Truths ---
+# Truths that WERE useful but are revealed after the window has closed.
+# The player learns they could have acted differently — but the moment is gone.
+var _deferred_truths: Array[Dictionary] = []
+const MAX_DEFERRED_TRUTHS := 5
+const DEFERRED_TRUTH_DELAY_MIN := 120.0  # 2 minutes minimum delay
+const DEFERRED_TRUTH_DELAY_MAX := 300.0  # 5 minutes max
+
+# --- B1: NPC-Helping Truths ---
+# Truths that are accurate and help an NPC — but the help comes at the player's expense.
+const NPC_HELP_TRUTH_LINES := [
+	"The outsider came from the %s. They carry %s weapons.",
+	"I saw them near the shrine. They were alone. Vulnerable.",
+	"They asked about %s. That tells you what they fear.",
+	"Watch their pattern — they always return to the Keeper when uncertain.",
+	"They trust too easily. Or not enough. Either way, predictable.",
+]
+
 
 func _ready() -> void:
 	pass
@@ -56,6 +88,12 @@ func _process(delta: float) -> void:
 
 	_try_seed_truth()
 	_check_verifications()
+
+	_contradiction_timer += SEED_CHECK_INTERVAL
+	if _contradiction_timer >= CONTRADICTION_CHECK_INTERVAL:
+		_contradiction_timer = 0.0
+		_try_seed_contradiction()
+	_check_deferred_truths()
 
 
 ## Attempt to seed a micro-truth into the world.
@@ -230,6 +268,134 @@ func _is_still_true(truth: Dictionary) -> bool:
 	return true
 
 
+# --- B1: Truth Contradictions ---
+
+## Try to seed a contradiction: two truths that are both correct but incompatible.
+func _try_seed_contradiction() -> void:
+	if _active_contradictions.size() >= MAX_ACTIVE_CONTRADICTIONS:
+		return
+	# Only seed contradictions when trust is below 0.7 — the world is already confused
+	if TrustDestruction.trust_level > 0.7:
+		return
+	if randf() >= 0.2:  # 20% chance per check
+		return
+
+	var contradiction := _generate_contradiction()
+	if contradiction.is_empty():
+		return
+	_active_contradictions.append(contradiction)
+	truth_contradiction_seeded.emit(
+		contradiction.get("truth_a", ""),
+		contradiction.get("truth_b", "")
+	)
+
+
+## Generate a pair of truths that are both correct but suggest opposite actions.
+func _generate_contradiction() -> Dictionary:
+	var now := Time.get_unix_time_from_system()
+	var dominant := GameState.get_dominant_force()
+	var pressure := GameState.world_pressure
+
+	# Type 1: Force balance contradiction
+	# "Violence is rising" (true) + "The Ironvow respect strength" (also true)
+	# Acting on the first means reducing violence; acting on the second means using it.
+	if dominant == "violence" and GameState.violence > 50.0:
+		return {
+			"truth_a": "Violence is rising. If it continues, the region will destabilize.",
+			"truth_b": "The Ironvow respond to displays of strength. They'll listen if you show force.",
+			"action_a": "reduce_violence",
+			"action_b": "increase_violence",
+			"timestamp": now,
+		}
+
+	# Type 2: God state contradiction
+	# "Verath is weakening" (true) + "Weakened gods are more dangerous" (also true)
+	# Help the god or let it die? Both truths suggest different responses.
+	for god_id in GodManager.god_defs:
+		var state := GodManager.get_god_state(god_id)
+		var name := GodManager.get_god_name(god_id)
+		if state in ["weakened", "fading"]:
+			return {
+				"truth_a": "%s is %s. Without intervention, it will die." % [name, state],
+				"truth_b": "A %s god lashes out. Its desperation makes it more dangerous, not less." % state,
+				"action_a": "help_god",
+				"action_b": "avoid_god",
+				"timestamp": now,
+			}
+
+	# Type 3: Faction contradiction
+	# Two factions both have legitimate claims, player can only support one.
+	if pressure > 40.0:
+		return {
+			"truth_a": "The Ashwalkers are protecting civilians in the eastern ruins. They need support.",
+			"truth_b": "The Truthseekers have information that could save lives — but they won't share it without trust.",
+			"action_a": "support_ashwalkers",
+			"action_b": "support_truthseekers",
+			"timestamp": now,
+		}
+
+	return {}
+
+
+# --- B1: Too-Late Truths ---
+
+## Snapshot a truth that will be revealed too late to act on.
+## Called when world state changes significantly — records what WAS true.
+func record_deferred_truth(truth_text: String, relevance_window: float) -> void:
+	if _deferred_truths.size() >= MAX_DEFERRED_TRUTHS:
+		_deferred_truths.pop_front()
+	_deferred_truths.append({
+		"text": truth_text,
+		"recorded_at": Time.get_unix_time_from_system(),
+		"reveal_delay": randf_range(DEFERRED_TRUTH_DELAY_MIN, DEFERRED_TRUTH_DELAY_MAX),
+		"relevance_window": relevance_window,
+		"revealed": false,
+	})
+
+
+## Check if any deferred truths should be revealed now.
+func _check_deferred_truths() -> void:
+	var now := Time.get_unix_time_from_system()
+	var to_remove: Array[int] = []
+	for i in range(_deferred_truths.size()):
+		var dt: Dictionary = _deferred_truths[i]
+		if dt.get("revealed", false):
+			to_remove.append(i)
+			continue
+		var age: float = now - dt.get("recorded_at", 0.0)
+		if age >= dt.get("reveal_delay", 300.0):
+			dt["revealed"] = true
+			var missed: float = age - dt.get("relevance_window", 60.0)
+			too_late_truth_revealed.emit(dt.get("text", ""), missed)
+			WorldMemory.record_ambient("A truth arrived too late to matter")
+	to_remove.reverse()
+	for idx in to_remove:
+		if idx < _deferred_truths.size():
+			_deferred_truths.remove_at(idx)
+
+
+# --- B1: NPC-Helping Truths ---
+
+## Get a truth that helps an NPC but exposes the player.
+## Called by NPC dialogue systems when an NPC wants to share "helpful" info
+## that actually weakens the player's position.
+func get_npc_helping_truth() -> String:
+	var dominant := GameState.get_dominant_force()
+	var template: String = NPC_HELP_TRUTH_LINES[randi() % NPC_HELP_TRUTH_LINES.size()]
+	# Fill in dynamic values
+	var zones := AnchorManager.keeper_zones
+	var zone_name: String = zones[randi() % zones.size()].replace("_", " ") if zones.size() > 0 else "the ruins"
+	var force_word := dominant.capitalize()
+	return template % [zone_name, force_word] if template.count("%s") == 2 else template % force_word if template.count("%s") == 1 else template
+
+
+## Get a contradiction pair for NPC dialogue.
+func get_active_contradiction() -> Dictionary:
+	if _active_contradictions.is_empty():
+		return {}
+	return _active_contradictions[randi() % _active_contradictions.size()]
+
+
 ## Get a random active micro-truth for NPC dialogue injection.
 ## Returns empty dict if none available.
 func get_random_truth_for_npc() -> Dictionary:
@@ -245,6 +411,8 @@ func get_truth_stats() -> Dictionary:
 		"total_seeded": _total_seeded,
 		"verified_count": _verified_count,
 		"current_trust": TrustDestruction.trust_level,
+		"active_contradictions": _active_contradictions.size(),
+		"deferred_truths_pending": _deferred_truths.size(),
 	}
 
 
@@ -260,6 +428,7 @@ func save_state() -> Dictionary:
 	return {
 		"total_seeded": _total_seeded,
 		"verified_count": _verified_count,
+		"contradiction_count": _active_contradictions.size(),
 	}
 
 

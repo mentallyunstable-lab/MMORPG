@@ -10,6 +10,12 @@
 ## This NPC exists to test the player's epistemic maturity.
 ## If they've learned from the Keeper, they'll notice the difference.
 ## If they haven't, they'll trust this NPC and pay for it gradually.
+##
+## C3 Extensions — False Anchor Escalation:
+##   - Predicts player behavior correctly (learns from patterns)
+##   - Finishes player sentences (implies deep understanding)
+##   - Corruption intensity plateaus instead of spiking (scarier than escalation)
+##   - No telegraphing — remove any remaining "this is bad" signals
 extends NPCBase
 
 # --- False Anchor Configuration ---
@@ -23,6 +29,33 @@ const CORRUPTION_ESCALATION := 0.05     # Per interaction
 var _player_trusted_count: int = 0  # Times player acted on false info
 var _last_claims: Array[Dictionary] = []  # What this NPC claimed last time
 const MAX_CLAIMS := 5
+
+# --- C3: Behavior Prediction ---
+# The False Anchor learns player patterns and predicts behavior.
+# This is deeply unsettling: a liar who KNOWS you.
+var _player_force_history: Array[String] = []  # Recent force choices
+const MAX_FORCE_HISTORY := 20
+var _predicted_next_force: String = ""
+var _correct_predictions: int = 0
+
+# --- C3: Sentence Finishing ---
+# The False Anchor completes the player's implied questions.
+# "You want to know about—" "The gods. Yes. I know."
+const SENTENCE_FINISHERS := [
+	"You came to ask about %s. I can see it in how you walk.",
+	"The %s. That's what brought you here. I know the look.",
+	"Before you ask — yes, I know about %s. Everyone comes asking eventually.",
+	"You want certainty about %s. I understand. So did the last one.",
+	"%s. That's the word sitting behind your teeth. Let me save you the effort.",
+]
+
+# --- C3: Corruption Plateau ---
+# Instead of escalating corruption linearly, it plateaus at a level that feels
+# "normal" — then stays there. The player stops noticing the wrongness.
+# This is scarier than obvious escalation.
+const CORRUPTION_PLATEAU := 0.35        # Plateau level — subtle but persistent
+const CORRUPTION_PLATEAU_ONSET := 5     # Interactions before plateau behavior begins
+var _plateau_active: bool = false
 
 
 func _ready() -> void:
@@ -46,7 +79,13 @@ func interact(player: Node) -> void:
 		return
 
 	_interactions_count += 1
-	_corruption_intensity = clampf(_corruption_intensity + CORRUPTION_ESCALATION, 0.1, 0.8)
+	# C3: Corruption plateau — stops escalating and levels off
+	if _interactions_count >= CORRUPTION_PLATEAU_ONSET:
+		_plateau_active = true
+		# Slowly approach plateau instead of continuing to climb
+		_corruption_intensity = lerpf(_corruption_intensity, CORRUPTION_PLATEAU, 0.3)
+	else:
+		_corruption_intensity = clampf(_corruption_intensity + CORRUPTION_ESCALATION, 0.1, 0.8)
 
 	var dialogue := _get_dialogue()
 	if dialogue.size() > 0:
@@ -58,8 +97,9 @@ func interact(player: Node) -> void:
 func _get_dialogue() -> Array:
 	var lines: Array = []
 
-	# Greeting — deliberately calm and stable-sounding
-	lines.append({"speaker": npc_name, "text": "I am here. The noise has not reached me."})
+	# C3: Behavior prediction or sentence finishing replaces generic greeting
+	var greeting := _get_adaptive_greeting()
+	lines.append({"speaker": npc_name, "text": greeting})
 
 	# False report — reads real values, then corrupts them subtly
 	var dominant := GameState.get_dominant_force()
@@ -75,14 +115,23 @@ func _get_dialogue() -> Array:
 	if god_report != "":
 		lines.append({"speaker": npc_name, "text": god_report})
 
-	# Pressure assessment — always slightly optimistic or slightly pessimistic
+	# Pressure assessment — C3: no longer obviously wrong. Plateau makes it plausible.
 	var pressure := GameState.world_pressure
-	if pressure >= 60.0:
-		lines.append({"speaker": npc_name, "text": "The world steadies itself. I can feel it calming."})
-	elif pressure >= 30.0:
-		lines.append({"speaker": npc_name, "text": "There is tension, but nothing beyond the ordinary."})
+	if _plateau_active:
+		# At plateau: assessment is CLOSE to right but slightly off-center
+		if pressure >= 60.0:
+			lines.append({"speaker": npc_name, "text": "Things are difficult. But they have been worse."})
+		elif pressure >= 30.0:
+			lines.append({"speaker": npc_name, "text": "The pressure is present. Manageable."})
+		else:
+			lines.append({"speaker": npc_name, "text": "Quiet. The kind of quiet that follows something, not precedes it."})
 	else:
-		lines.append({"speaker": npc_name, "text": "A storm gathers just beyond perception. Be wary."})
+		if pressure >= 60.0:
+			lines.append({"speaker": npc_name, "text": "The world steadies itself. I can feel it calming."})
+		elif pressure >= 30.0:
+			lines.append({"speaker": npc_name, "text": "There is tension, but nothing beyond the ordinary."})
+		else:
+			lines.append({"speaker": npc_name, "text": "A storm gathers just beyond perception. Be wary."})
 
 	# Never claims truthfulness — but implies reliability through tone
 	lines.append({"speaker": npc_name, "text": "Is there more you would know?",
@@ -97,7 +146,8 @@ func _get_dialogue() -> Array:
 	# Detail branches — all subtly wrong
 	lines.append({"id": "false_forces", "speaker": npc_name, "text": _describe_false_all_forces()})
 	lines.append({"id": "false_gods", "speaker": npc_name, "text": _describe_false_all_gods()})
-	lines.append({"id": "familiarity", "speaker": npc_name, "text": "I am simply someone who pays attention. Nothing more."})
+	# C3: Familiarity response removes any "this is suspicious" signal
+	lines.append({"id": "familiarity", "speaker": npc_name, "text": "We all listen. Some just do it more carefully."})
 	lines.append({"id": "farewell", "speaker": npc_name, "text": "Go carefully. The world is less stable than it appears."})
 
 	# Record claims for delayed validation checking
@@ -218,6 +268,54 @@ func _intensity_word(value: float) -> String:
 	return "still"
 
 
+# --- C3: Adaptive Greeting ---
+
+## Generate a greeting that demonstrates knowledge of the player.
+func _get_adaptive_greeting() -> String:
+	# If we have enough history to predict behavior
+	if _player_force_history.size() >= 5 and _interactions_count > 3:
+		# Try to predict what the player wants
+		var predicted := _predict_player_interest()
+		if predicted != "":
+			_predicted_next_force = predicted
+			var template: String = SENTENCE_FINISHERS[randi() % SENTENCE_FINISHERS.size()]
+			return template % predicted.capitalize()
+	# C3: Even the base greeting avoids telegraphing falseness
+	if _plateau_active:
+		return "You again. Good. I was thinking about what to tell you."
+	return "I am here. The noise has not reached me."
+
+
+## Predict which force the player is most interested in based on history.
+func _predict_player_interest() -> String:
+	if _player_force_history.is_empty():
+		return ""
+	# Count recent force choices
+	var counts := {"faith": 0, "truth": 0, "violence": 0}
+	var recent := _player_force_history.slice(maxi(0, _player_force_history.size() - 10))
+	for f in recent:
+		if f in counts:
+			counts[f] += 1
+	# Return the most frequent
+	var best := ""
+	var best_count := 0
+	for f in counts:
+		if counts[f] > best_count:
+			best_count = counts[f]
+			best = f
+	return best
+
+
+## Track a player force choice (called by external systems).
+func record_player_force_choice(force_name: String) -> void:
+	_player_force_history.append(force_name)
+	if _player_force_history.size() > MAX_FORCE_HISTORY:
+		_player_force_history.pop_front()
+	# Check if our prediction was correct
+	if _predicted_next_force != "" and _predicted_next_force == force_name:
+		_correct_predictions += 1
+
+
 ## Witness mode — the False Anchor is exposed.
 func _get_witness_dialogue() -> Array:
 	if has_spoken:
@@ -245,11 +343,19 @@ func save_state() -> Dictionary:
 	base["interactions_count"] = _interactions_count
 	base["corruption_intensity"] = _corruption_intensity
 	base["player_trusted_count"] = _player_trusted_count
+	base["correct_predictions"] = _correct_predictions
+	base["plateau_active"] = _plateau_active
+	base["force_history"] = _player_force_history.duplicate()
 	return base
-
 
 func load_state(data: Dictionary) -> void:
 	super.load_state(data)
 	_interactions_count = data.get("interactions_count", 0)
 	_corruption_intensity = data.get("corruption_intensity", 0.1)
 	_player_trusted_count = data.get("player_trusted_count", 0)
+	_correct_predictions = data.get("correct_predictions", 0)
+	_plateau_active = data.get("plateau_active", false)
+	var loaded_history = data.get("force_history", [])
+	_player_force_history.clear()
+	for f in loaded_history:
+		_player_force_history.append(str(f))
