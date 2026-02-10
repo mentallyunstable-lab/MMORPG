@@ -42,6 +42,8 @@ AnchorStrain="*res://scripts/autoload/anchor_strain.gd"
 TruthMisuse="*res://scripts/autoload/truth_misuse.gd"
 AntiSaveScum="*res://scripts/autoload/anti_save_scum.gd"
 AnchorAbsenceLegacy="*res://scripts/autoload/anchor_absence_legacy.gd"
+VisualDecay="*res://scripts/autoload/visual_decay.gd"
+JournalViolence="*res://scripts/autoload/journal_violence.gd"
 DebugTimer="*res://scripts/autoload/debug_timer.gd"
 
 [display]

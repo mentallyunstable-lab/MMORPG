@@ -69,21 +69,31 @@ func _on_dialogue_started(_speaker: String) -> void:
 
 
 func _on_dialogue_line(speaker: String, text: String) -> void:
+	# --- VisualDecay integration: dialogue damage pipeline ---
+	var processed_text := _apply_dialogue_damage(speaker, text)
+
 	# E1: If there's a pending delay, show "..." first, then reveal after timer
 	var delay_ms := DialogueManager.get_pending_delay_ms()
+
+	# 2.1: Additional dead air before hard truths
+	if VisualDecay:
+		var dead_air := VisualDecay.get_dialogue_dead_air(processed_text)
+		if dead_air > 0.0:
+			delay_ms = maxf(delay_ms, dead_air)
+
 	if delay_ms > 0.0:
 		speaker_label.text = speaker
 		text_label.text = "..."
 		_delayed_speaker = speaker
 		# E1: Apply line cutting for strained Keeper
-		_delayed_text = DialogueManager.maybe_cut_line_short(speaker, text)
+		_delayed_text = DialogueManager.maybe_cut_line_short(speaker, processed_text)
 		_delay_timer.start(delay_ms / 1000.0)
 		_clear_choices()
 		choices_container.visible = false
 		continue_label.visible = false
 		return
 	speaker_label.text = speaker
-	text_label.text = DialogueManager.maybe_cut_line_short(speaker, text)
+	text_label.text = DialogueManager.maybe_cut_line_short(speaker, processed_text)
 	_clear_choices()
 	choices_container.visible = false
 	continue_label.visible = true
@@ -126,6 +136,13 @@ func _on_dialogue_line_delayed(_speaker: String, _text: String, _delay_ms: float
 ## E1: Delay timer finished — reveal the actual text.
 func _on_delay_finished() -> void:
 	text_label.text = _delayed_text
+
+	# 2.1: After dead air, NPC might finish the player's thought WRONG
+	if VisualDecay:
+		var wrong_finish := VisualDecay.get_wrong_sentence_finish(_delayed_speaker)
+		if wrong_finish != "":
+			text_label.text = _delayed_text + " " + wrong_finish
+
 	continue_label.visible = true
 	continue_label.text = "[E] Continue"
 
@@ -133,3 +150,28 @@ func _on_delay_finished() -> void:
 func _clear_choices() -> void:
 	for child in choices_container.get_children():
 		child.queue_free()
+
+
+# --- 2.1: Dialogue Damage Pipeline ---
+# Processes text through VisualDecay's damage systems:
+#   - Punctuation flicker (periods vanish, em dashes elongate)
+#   - Sentence clipping (starts confident, ends mid-word)
+#   - Keeper text is IMMUNE to all damage
+
+func _apply_dialogue_damage(speaker: String, text: String) -> String:
+	if not VisualDecay:
+		return text
+	if DevToggles and DevToggles.disable_dialogue_damage:
+		return text
+
+	# Keeper immunity — pixel-perfect always
+	if VisualDecay.is_keeper_immune(speaker):
+		return text
+
+	# 1.1: Punctuation flicker
+	text = VisualDecay.apply_punctuation_flicker(text)
+
+	# 2.1: Sentence clipping (starts confident, ends clipped mid-word)
+	text = VisualDecay.maybe_clip_sentence(speaker, text)
+
+	return text

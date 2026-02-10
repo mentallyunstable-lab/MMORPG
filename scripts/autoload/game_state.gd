@@ -223,6 +223,8 @@ func _texts_share_topic(a: String, b: String) -> bool:
 var save_allowed: bool = true  # Set false during attention spikes, combat, etc.
 
 signal save_blocked(reason: String)
+signal save_shame_thumbnail_delayed(delay_seconds: float)  # 14: Save thumbnail updates late
+signal load_text_leading(should_lead: bool)  # 14: Load text appears before background
 
 
 ## Check if saving is currently permitted.
@@ -279,11 +281,18 @@ func save_game() -> bool:
 	data["anchor_strain"] = AnchorStrain.save_state()
 	data["truth_misuse"] = TruthMisuse.save_state()
 	data["anchor_legacy"] = AnchorAbsenceLegacy.save_state()
+	if VisualDecay:
+		data["visual_decay"] = VisualDecay.save_state()
 
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(data))
 		file.close()
+		# 14: Save shame — thumbnail updates late after detected scumming
+		if VisualDecay:
+			var thumb_delay := VisualDecay.get_save_thumbnail_delay()
+			if thumb_delay > 0.0:
+				save_shame_thumbnail_delayed.emit(thumb_delay)
 		return true
 	return false
 
@@ -334,6 +343,12 @@ func load_game() -> bool:
 	if AntiSaveScum:
 		AntiSaveScum.on_game_loaded()
 
+	# 14: Load shame — text appears before background on shamed loads
+	if VisualDecay and VisualDecay.should_load_text_lead():
+		load_text_leading.emit(true)
+	else:
+		load_text_leading.emit(false)
+
 	load_state(data)
 	if data.has("world_memory"):
 		WorldMemory.load_state(data["world_memory"])
@@ -373,6 +388,8 @@ func _load_new_system_states(data: Dictionary) -> void:
 		TruthMisuse.load_state(data["truth_misuse"])
 	if data.has("anchor_legacy") and AnchorAbsenceLegacy:
 		AnchorAbsenceLegacy.load_state(data["anchor_legacy"])
+	if data.has("visual_decay") and VisualDecay:
+		VisualDecay.load_state(data["visual_decay"])
 
 
 ## Called when an ending is reached — locks the save permanently.

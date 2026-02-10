@@ -26,6 +26,10 @@ var _truth_flicker_timer: float = 0.0       # Countdown for UI misalignment
 var _faith_warmth: float = 0.0              # 0=neutral, 1=golden glow
 
 
+## Silence tint overlay — cold blue wash during silence fallout
+var _silence_tint_overlay: ColorRect = null
+
+
 func _ready() -> void:
 	GameState.force_changed.connect(_on_force_changed)
 	interact_prompt.visible = false
@@ -45,6 +49,14 @@ func _ready() -> void:
 	_grain_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_grain_overlay)
 	move_child(_grain_overlay, 0)
+
+	# Silence tint overlay — cold blue wash (1.2)
+	_silence_tint_overlay = ColorRect.new()
+	_silence_tint_overlay.color = Color(0, 0, 0, 0)
+	_silence_tint_overlay.anchors_preset = Control.PRESET_FULL_RECT
+	_silence_tint_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_silence_tint_overlay)
+	move_child(_silence_tint_overlay, 0)
 
 	_update_forces()
 	_update_health()
@@ -82,6 +94,15 @@ func _process(_delta: float) -> void:
 
 	# Subtle save degradation — UI corruption at extreme states
 	_apply_degradation_effects()
+
+	# --- 1.1: Truth Strain Visual Layer (VisualDecay) ---
+	_apply_truth_strain_visuals(_delta)
+
+	# --- 1.2: Silence Fallout Light Temperature Shift ---
+	_apply_silence_light_tint()
+
+	# --- 10: Visual Decay Phasing — easing + incomplete transitions ---
+	_apply_decay_phasing(_delta)
 
 
 func _on_force_changed(force_name: String, old_value: float, new_value: float) -> void:
@@ -248,3 +269,96 @@ func _apply_degradation_effects() -> void:
 				interact_prompt.text = "[E] Interact"
 		else:
 			interact_prompt.text = "[E] Interact"
+
+
+# --- 1.1: Truth Strain UI Jitter, Punctuation Flicker, Alignment Drift ---
+# Micro-jitter on all UI text when strain > 0.4
+# Permanent alignment drift when strain > 0.8 (never snaps back)
+
+func _apply_truth_strain_visuals(_delta: float) -> void:
+	if not VisualDecay:
+		return
+
+	# UI element jitter — applied to force bars and interact prompt
+	var jitter := VisualDecay.get_ui_jitter()
+	if jitter != Vector2.ZERO:
+		# Jitter on force bars (subtle unease — the numbers aren't stable)
+		if faith_bar and faith_bar.has_meta("_base_x"):
+			faith_bar.position.x += jitter.x
+		if truth_bar and truth_bar.has_meta("_base_x"):
+			truth_bar.position.x += jitter.x * 0.7
+		if violence_bar and violence_bar.has_meta("_base_x"):
+			violence_bar.position.x += jitter.x * 0.5
+		# Jitter on interact prompt
+		if interact_prompt and interact_prompt.visible:
+			interact_prompt.position += jitter
+
+	# Permanent alignment drift (1.1) — entire HUD shifts off-center. Never comes back.
+	var drift := VisualDecay.get_alignment_drift()
+	if drift != Vector2.ZERO:
+		position = drift
+
+
+# --- 1.2: Silence Fallout Light Temperature Shift ---
+# Cold blue wash on screen during/after silence
+
+func _apply_silence_light_tint() -> void:
+	if not VisualDecay or not _silence_tint_overlay:
+		return
+	var tint := VisualDecay.get_silence_light_tint()
+	if tint == Color.WHITE:
+		_silence_tint_overlay.color = Color(0, 0, 0, 0)
+	else:
+		# Apply as a subtle full-screen color wash
+		_silence_tint_overlay.color = Color(
+			tint.r * 0.1,
+			tint.g * 0.1,
+			tint.b * 0.15,
+			absf(VisualDecay.light_kelvin_offset) / 600.0 * 0.06
+		)
+
+
+# --- 10: Visual Decay Phasing ---
+# At strain >0.6: UI animations snap instead of easing smoothly
+# At strain >0.8: UI transitions freeze before completing (70-90%)
+# Applied to force bar value updates and tween animations.
+# The player can't name it, but the UI feels "wrong" — movement logic changed.
+
+## Tracks whether bars are mid-transition (for incompleteness freeze)
+var _bar_transition_targets: Dictionary = {}  # bar_node -> target_value
+
+
+func _apply_decay_phasing(_delta: float) -> void:
+	if not VisualDecay:
+		return
+	if DevToggles and DevToggles.disable_decay_phasing:
+		return
+
+	var easing := VisualDecay.get_easing_power(false)
+	var completion := VisualDecay.get_transition_completion(false)
+
+	# Apply transition incompleteness to force bars
+	# Bars lerp toward target but stop short at high strain
+	for bar in [faith_bar, truth_bar, violence_bar]:
+		if not bar:
+			continue
+		var target: float = 0.0
+		if bar == faith_bar:
+			target = GameState.faith
+		elif bar == truth_bar:
+			target = GameState.truth
+		elif bar == violence_bar:
+			target = GameState.violence
+
+		# At high incompleteness: bar stops updating fully
+		if completion < 1.0:
+			var actual_target := bar.value + (target - bar.value) * completion
+			bar.value = lerpf(bar.value, actual_target, _delta * easing * 3.0)
+		else:
+			# Normal update with easing power affecting speed
+			var speed := 5.0 / maxf(easing, 1.0)  # Higher easing = snappier
+			if easing > 2.0:
+				# Snap behavior: jump most of the way instantly
+				bar.value = lerpf(bar.value, target, _delta * easing * 6.0)
+			else:
+				bar.value = lerpf(bar.value, target, _delta * speed)

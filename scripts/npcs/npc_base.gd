@@ -44,6 +44,55 @@ func _ready() -> void:
 	GameState.force_changed.connect(_on_force_changed)
 
 
+## --- 2.2 / 7.1: Physical reactions to social decay and proximity endurance ---
+## NPCs fidget, step back, and become physically uncomfortable near the player.
+## No collision changes. No verbal acknowledgment. Only body language.
+var _social_decay_reposition_timer: float = 0.0
+const SOCIAL_DECAY_CHECK_INTERVAL := 3.0
+
+
+func _process(delta: float) -> void:
+	if not VisualDecay:
+		return
+	if DevToggles and DevToggles.disable_social_decay:
+		return
+
+	_social_decay_reposition_timer += delta
+	if _social_decay_reposition_timer < SOCIAL_DECAY_CHECK_INTERVAL:
+		return
+	_social_decay_reposition_timer = 0.0
+
+	# 9: During decay-free windows, all physical unease pauses (the contrast)
+	if VisualDecay.is_decay_free():
+		if _mesh_node:
+			_mesh_node.scale = Vector3.ONE  # Reset fidget
+		return
+
+	# 7.1: NPC proximity endurance — physical fidgeting
+	if not (DevToggles and DevToggles.disable_honest_metric):
+		var endurance := VisualDecay.get_npc_proximity_endurance()
+		if endurance < 50.0 and _mesh_node:
+			# Subtle fidget: micro-scale pulse (NPCs are uncomfortable)
+			var fidget := randf_range(0.98, 1.02)
+			_mesh_node.scale = Vector3(fidget, fidget, fidget)
+
+	# 12: NPC eye behavior — look-past, held contact
+	if not (DevToggles and DevToggles.disable_eye_behavior):
+		_apply_eye_behavior()
+
+	# 2.2: Social decay — NPCs subtly reposition farther from player
+	var player := get_tree().get_first_node_in_group("player")
+	if not player or not player is Node3D:
+		return
+	var distance_mult := VisualDecay.get_npc_distance_multiplier()
+	if distance_mult <= 1.05:
+		return
+	# Nudge NPC position away from player (very subtle, 0.1m per check max)
+	var dir_away := (global_position - player.global_position).normalized()
+	if dir_away.length() > 0.01:
+		global_position += dir_away * minf(0.1, (distance_mult - 1.0) * 0.15)
+
+
 ## Called by PlayerController when player presses interact.
 func interact(_player: Node) -> void:
 	if DialogueManager.is_active:
@@ -111,6 +160,21 @@ func interact(_player: Node) -> void:
 		var doubt_line := KeeperOverreliance.get_agency_doubt_line()
 		if doubt_line != "":
 			dialogue.append({"speaker": npc_name, "text": doubt_line})
+
+	# --- 3.2: Memory conflict injection (JournalViolence) ---
+	# NPC references events with swapped cause/effect or inverted emotions
+	# 9: Suppressed during decay-free windows (everything should feel normal)
+	var _decay_free := VisualDecay and VisualDecay.is_decay_free()
+	if dialogue.size() > 0 and JournalViolence and not _decay_free:
+		if randf() < 0.1:  # 10% chance
+			var swapped := JournalViolence.get_swapped_memory_line()
+			if swapped != "":
+				dialogue.append({"speaker": npc_name, "text": swapped})
+		elif randf() < 0.08:  # 8% chance for emotion inversion
+			var inversion := JournalViolence.get_emotion_inversion()
+			if not inversion.is_empty():
+				# This NPC states one version; another NPC will state the other
+				dialogue.append({"speaker": npc_name, "text": inversion.get("npc_a", "")})
 
 	# --- C2: Keeper misquote ---
 	if dialogue.size() > 0 and AnchorAbsenceLegacy and AnchorManager.current_state != AnchorManager.AnchorState.PRESENT:
@@ -407,6 +471,44 @@ func _apply_context_withholding(dialogue: Array) -> Array:
 	var idx: int = removable[randi() % removable.size()]
 	dialogue.remove_at(idx)
 	return dialogue
+
+
+# --- 12: NPC Eye Behavior ---
+# At low honest metric: NPCs look past the player (through them, 1-3m behind)
+# During silence fallout: eye contact holds 300ms too long, then snaps away
+# Keeper eye contact is perfectly timed, always (handled by VisualDecay)
+# This adjusts the NPC's visual look-at target. No verbal acknowledgment.
+
+## Cached look-at offset for smooth interpolation
+var _eye_target_offset: Vector3 = Vector3.ZERO
+
+
+## Apply eye behavior offset to this NPC's look-at target.
+## The NPC looks at player_position + offset, creating subtle wrongness.
+func _apply_eye_behavior() -> void:
+	if not VisualDecay:
+		return
+	var target_offset := VisualDecay.get_npc_eye_target_offset(false)
+	# Smooth interpolation — don't snap between modes
+	_eye_target_offset = _eye_target_offset.lerp(target_offset, 0.15)
+
+	# Apply to mesh rotation if we have a player to look at
+	var player := get_tree().get_first_node_in_group("player")
+	if not player or not player is Node3D or not _mesh_node:
+		return
+
+	# Only adjust if there's a meaningful offset
+	if _eye_target_offset.length() < 0.05:
+		return
+
+	# Look toward player position + offset (creates "looking through/past" effect)
+	var look_target: Vector3 = player.global_position + _eye_target_offset
+	var dir_to_target := (look_target - _mesh_node.global_position).normalized()
+	if dir_to_target.length() > 0.01:
+		# Subtle rotation toward offset target (head turn, not full body)
+		var current_basis := _mesh_node.global_transform.basis
+		var target_basis := Basis.looking_at(dir_to_target)
+		_mesh_node.global_transform.basis = current_basis.slerp(target_basis, 0.08)
 
 
 # --- Trust-Aware World State Queries ---
